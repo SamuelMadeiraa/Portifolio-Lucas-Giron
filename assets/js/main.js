@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
    LUCAS GIRON — Creative Motion Director
-   O conteúdo (textos, projetos, imagens, cores) vem de /content.json,
-   que é editado pelo painel em /admin.
+   O conteúdo (textos, projetos, imagens, cores) é editado pelo painel em /admin
+   e servido por /api/content (Vercel Blob). Sem a API, usa o content.json.
    ═══════════════════════════════════════════════════════════ */
 (() => {
   'use strict';
@@ -136,6 +136,12 @@
         return merge(DEFAULTS, JSON.parse(JSON.stringify(src.content)));
       }
     }
+    // 1) conteúdo publicado pelo painel (Vercel Blob, via /api/content)
+    try {
+      const r = await fetch('/api/content', { cache: 'no-cache' });
+      if (r.ok) return merge(DEFAULTS, await r.json());
+    } catch (e) { /* sem API (arquivo local / outro servidor) */ }
+    // 2) content.json que vem junto com o site
     try {
       const r = await fetch('content.json', { cache: 'no-cache' });
       if (r.ok) return merge(DEFAULTS, await r.json());

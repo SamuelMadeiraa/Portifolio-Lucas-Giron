@@ -15,57 +15,36 @@
 <body>
 
 <!-- ══════════ LOGIN ══════════ -->
-<section class="login" id="login">
+<section class="login" id="login" hidden>
   <div class="login__card">
     <div class="brand"><span class="brand__mark">LG</span><span class="mono">Painel admin</span></div>
 
-    <!-- já configurado neste navegador: só a senha -->
-    <form id="unlockForm" hidden>
+    <form id="loginForm">
       <h1>Entrar</h1>
-      <p class="hint" id="unlockInfo"></p>
+      <p class="hint">Painel de edição do site.</p>
+      <label class="field"><span>Usuário</span>
+        <input class="in" id="loginUser" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </label>
       <label class="field"><span>Senha</span>
-        <input class="in" type="password" id="unlockPass" autocomplete="current-password" required>
+        <input class="in" type="password" id="loginPass" autocomplete="current-password" required>
       </label>
+      <label class="check"><input type="checkbox" id="showPass"><i></i><span>Mostrar senha</span></label>
       <button class="btn btn--primary" type="submit">Entrar</button>
-      <button class="link" type="button" id="resetSetup">Esqueci a senha / usar outra conta</button>
-    </form>
-
-    <!-- primeira vez: conectar ao GitHub -->
-    <form id="setupForm" hidden>
-      <h1>Conectar ao GitHub</h1>
-      <p class="hint">O painel salva as alterações e os arquivos direto no repositório do site. Isso só precisa ser feito uma vez por navegador.</p>
-      <div class="grid2">
-        <label class="field"><span>Usuário do GitHub</span><input class="in" id="ghOwner" autocomplete="username" required placeholder="seu-usuario"></label>
-        <label class="field"><span>Repositório</span><input class="in" id="ghRepo" required placeholder="nome-do-repo"></label>
-      </div>
-      <label class="field"><span>Branch</span><input class="in" id="ghBranch" value="main" required></label>
-      <label class="field"><span>Token do GitHub</span><input class="in" type="password" id="ghToken" required autocomplete="off" placeholder="github_pat_…"></label>
-      <details class="help">
-        <summary>Como criar o token (2 minutos)</summary>
-        <ol>
-          <li>Abra <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.</li>
-          <li>Dê um nome (ex.: <em>admin do portfólio</em>) e escolha uma validade.</li>
-          <li>Em <b>Repository access</b>, marque <b>Only select repositories</b> e escolha o repositório do site.</li>
-          <li>Em <b>Permissions → Repository permissions → Contents</b>, escolha <b>Read and write</b>.</li>
-          <li>Clique em <b>Generate token</b>, copie e cole aqui.</li>
-        </ol>
-        <p>O token só dá acesso a esse repositório e fica guardado <b>criptografado com a sua senha</b>, só neste navegador.</p>
-      </details>
-      <label class="field"><span>Crie uma senha para o painel</span>
-        <input class="in" type="password" id="newPass" minlength="6" required autocomplete="new-password" placeholder="mínimo 6 caracteres">
-      </label>
-      <button class="btn btn--primary" type="submit">Conectar</button>
     </form>
 
     <p class="err" id="loginErr" role="alert"></p>
-    <p class="hint" id="cryptoNote" hidden>Este navegador não permite guardar o token com segurança (abra o painel por https). Você vai precisar colar o token a cada acesso.</p>
-    <button class="link" type="button" id="localMode">Testar sem GitHub (não publica, só baixa os arquivos)</button>
+    <p class="hint" id="noApiNote" hidden>
+      O login só funciona com o site publicado na Vercel (ou rodando com <code>vercel dev</code>).
+      Aqui você pode testar o painel, mas nada é salvo no site.
+    </p>
+    <button class="link" type="button" id="localMode" hidden>Testar sem salvar (só baixa o content.json)</button>
   </div>
 </section>
 
 <!-- ══════════ PAINEL ══════════ -->
 <div class="app" id="app" hidden>
-  <div class="localbar" id="localBar" hidden>Modo local: nada é publicado. “Baixar arquivos” gera o content.json e os arquivos enviados para você subir manualmente.</div>
+  <div class="localbar" id="localBar" hidden>Modo de teste: nada é salvo no site. “Baixar content.json” gera o arquivo com as alterações. Envio de fotos e vídeos só funciona na Vercel.</div>
+  <div class="localbar" id="storageBar" hidden>O armazenamento não está ligado: no painel da Vercel, abra o projeto → <b>Storage</b> → <b>Create → Blob</b> e conecte ao projeto. Depois faça um novo deploy.</div>
   <header class="bar">
     <div class="brand"><span class="brand__mark">LG</span><span class="mono" id="repoLabel">Painel</span></div>
     <nav class="tabs" role="tablist">
@@ -99,7 +78,7 @@
           <input type="file" accept="video/*">
           <span class="drop__ico">⬆</span>
           <span><b>Clique ou arraste um vídeo aqui</b></span>
-          <span class="hint">MP4 de preferência, até ~95 MB. A capa é gerada sozinha (dá pra trocar depois).</span>
+          <span class="hint">MP4 de preferência. A capa é gerada sozinha (dá pra trocar depois).</span>
         </label>
       </div>
 
@@ -147,7 +126,7 @@
     <section class="panel" data-panel="midia" hidden>
       <div class="card">
         <h2>Arquivos do site</h2>
-        <p class="hint">Fotos, imagens e vídeos enviados ficam na pasta <b>uploads/</b> do site. Imagens grandes são otimizadas automaticamente.</p>
+        <p class="hint">Fotos, imagens e vídeos enviados. Imagens grandes são otimizadas automaticamente antes de subir.</p>
         <label class="drop" id="mediaDrop">
           <input type="file" accept="image/*,video/*,application/pdf" multiple>
           <span class="drop__ico">⬆</span>

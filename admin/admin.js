@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════════════
    PAINEL ADMIN
-   Edita o content.json do site e envia arquivos (fotos, vídeos),
-   publicando direto no repositório do GitHub — 1 commit por publicação.
+   Login com usuário e senha (funções da Vercel). O conteúdo é salvo
+   no Vercel Blob via /api/content e os arquivos sobem direto do
+   navegador para o Blob (via /api/upload).
    ═══════════════════════════════════════════════════════════ */
 (() => {
   'use strict';
@@ -27,19 +28,11 @@
     if (html != null) e.innerHTML = html;
     return e;
   }
-  const te = new TextEncoder(), td = new TextDecoder();
-  const b64e = buf => { let s = ''; new Uint8Array(buf).forEach(b => { s += String.fromCharCode(b); }); return btoa(s); };
-  const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-  const blobToB64 = b => new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).split(',')[1] || '');
-    r.onerror = () => rej(r.error);
-    r.readAsDataURL(b);
-  });
 
   /* ══════════ CONSTANTES ══════════ */
-  const STORE = 'lg-admin';
+  const BLOB_CLIENT = 'https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/dist/client.js/+esm';
   const CDN = 'https://i.vimeocdn.com/video/';
+  const LOCAL_UPLOAD = 'Envio de fotos e vídeos só funciona com o site na Vercel.';
   const LABELS = {
     navWorks: 'Trabalhos', navAbout: 'Sobre', navContact: 'Contato', specialty: 'Especialidade',
     works: 'Trabalhos\nSelecionados', all: 'Todos', about: 'Sobre', tools: 'Ferramentas',
@@ -72,17 +65,34 @@
 
   /* ══════════ ESTADO ══════════ */
   const S = {
-    gh: null,             // { owner, repo, branch, token }
-    local: false,         // modo sem GitHub
-    content: null,        // o content.json sendo editado
+    user: '',
+    local: false,     // modo de teste sem servidor
+    storage: false,   // Vercel Blob conectado?
+    content: null,    // o conteúdo sendo editado
     dirty: false,
-    pending: new Map(),   // caminho → { file, url, size, name, type, keep }
-    published: new Map(), // caminho → blob URL (acabou de publicar, o site ainda está atualizando)
-    deleted: new Set(),   // caminhos a apagar do repositório
-    media: [],            // arquivos em uploads/ no repositório
+    media: [],        // arquivos enviados: { path, url, name, size }
     previewWin: null,
   };
-  const mediaMap = () => new Map(S.media.map(m => [m.path, m]));
+
+  /* ══════════ API ══════════ */
+  async function api(path, opts = {}) {
+    const headers = { 'X-LG-Admin': '1', ...(opts.headers || {}) };
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    const r = await fetch('/api/' + path, { credentials: 'same-origin', cache: 'no-store', ...opts, headers });
+    let data = null;
+    try { data = await r.json(); } catch (e) { /* sem corpo */ }
+    if (!r.ok) {
+      const err = new Error((data && data.error) || r.statusText || 'erro');
+      err.status = r.status;
+      throw err;
+    }
+    return data;
+  }
+  function friendly(e) {
+    if (!e) return 'erro desconhecido';
+    if (e instanceof TypeError) return 'sem conexão com a internet';
+    return e.message || 'erro desconhecido';
+  }
 
   /* ══════════ FORMATO DO CONTEÚDO ══════════ */
   function ensureShape(c) {
@@ -118,17 +128,18 @@
     return c;
   }
 
-  // todos os caminhos "uploads/…" usados no conteúdo
+  // arquivo enviado pelo painel? (URL do Blob ou caminho uploads/)
+  const isUpload = v => typeof v === 'string' && (v.startsWith('uploads/') || /\.blob\.vercel-storage\.com\/uploads\//.test(v));
   function usedPaths(c) {
     const set = new Set();
     (function walk(v) {
-      if (typeof v === 'string') { if (v.startsWith('uploads/')) set.add(v); }
+      if (typeof v === 'string') { if (isUpload(v)) set.add(v); }
       else if (Array.isArray(v)) v.forEach(walk);
       else if (v && typeof v === 'object') Object.values(v).forEach(walk);
     })(c);
     return set;
   }
-  // remove as referências a um arquivo apagado
+  // tira as referências a um arquivo apagado
   function removeRefs(c, path) {
     (function walk(o) {
       if (Array.isArray(o)) {
@@ -141,27 +152,18 @@
     })(c);
   }
 
-  // URL para mostrar um arquivo dentro do painel
-  function assetUrl(p) {
-    if (!p) return '';
-    if (/^(https?:|data:|blob:)/.test(p)) return p;
-    if (S.pending.has(p)) return S.pending.get(p).url;
-    if (S.published.has(p)) return S.published.get(p);
-    const m = mediaMap().get(p);
-    if (m && m.download_url) return m.download_url;
-    return '../' + p;
-  }
-  const kindOf = p => /\.(jpe?g|png|webp|gif|svg|avif)$/i.test(p) ? 'image' : /\.(mp4|webm|mov|m4v|ogv)$/i.test(p) ? 'video' : 'file';
+  const assetUrl = p => (!p ? '' : /^(https?:|data:|blob:)/.test(p) ? p : '../' + p);
+  const kindOf = p => /\.(jpe?g|png|webp|gif|svg|avif)(\?|$)/i.test(p) ? 'image' : /\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(p) ? 'video' : 'file';
 
   /* ══════════ TOAST / CONFIRMAÇÃO ══════════ */
   let toastT;
-  function toast(msg, err) {
+  function toast(msg, err, sticky) {
     const t = $('#toast');
     t.textContent = msg;
     t.classList.toggle('is-err', !!err);
     t.classList.add('is-on');
     clearTimeout(toastT);
-    toastT = setTimeout(() => t.classList.remove('is-on'), err ? 6500 : 3200);
+    if (!sticky) toastT = setTimeout(() => t.classList.remove('is-on'), err ? 6500 : 3200);
   }
   function ask(title, text, { ok = 'Confirmar', danger = false, cancel = 'Cancelar' } = {}) {
     return new Promise(res => {
@@ -181,19 +183,9 @@
       $('[data-v="1"]', d).focus();
     });
   }
-  function friendly(e) {
-    if (!e) return 'erro desconhecido';
-    if (e.status === 401) return 'token inválido ou expirado — entre de novo com um token novo';
-    if (e.status === 403) return 'sem permissão — o token precisa de “Contents: Read and write” nesse repositório';
-    if (e.status === 404) return 'repositório ou branch não encontrado';
-    if (e.status === 409) return 'o repositório está vazio — faça pelo menos um commit antes';
-    if (e.status === 422) return e.message || 'dados recusados pelo GitHub';
-    if (e instanceof TypeError) return 'sem conexão com a internet';
-    return e.message || 'erro desconhecido';
-  }
 
   /* ══════════ STATUS / RASCUNHO / PRÉ-VISUALIZAÇÃO ══════════ */
-  const draftKey = () => 'lg-admin-draft:' + (S.local ? 'local' : `${S.gh.owner}/${S.gh.repo}`);
+  const draftKey = () => 'lg-admin-draft:' + (S.local ? 'local' : 'site');
   let draftT, prevT;
   function changed() {
     S.dirty = true;
@@ -213,18 +205,13 @@
     const st = $('#status'), t = $('span', st);
     st.className = 'status mono';
     if (mode === 'saving') { st.classList.add('is-saving'); t.textContent = text || 'Publicando…'; }
-    else if (S.dirty || S.deleted.size) { st.classList.add('is-dirty'); t.textContent = S.local ? 'Não exportado' : 'Não publicado'; }
-    else { if (S.local) st.classList.add('is-local'); t.textContent = S.local ? 'Modo local' : 'Tudo publicado'; }
-    $('#publishBtn').textContent = S.local ? 'Baixar arquivos' : 'Publicar';
+    else if (S.dirty) { st.classList.add('is-dirty'); t.textContent = S.local ? 'Não exportado' : 'Não publicado'; }
+    else { if (S.local) st.classList.add('is-local'); t.textContent = S.local ? 'Modo de teste' : 'Tudo publicado'; }
+    $('#publishBtn').textContent = S.local ? 'Baixar content.json' : 'Publicar';
   }
 
-  function previewData() {
-    const files = {};
-    S.published.forEach((v, k) => { files[k] = v; });
-    S.pending.forEach((v, k) => { files[k] = v.url; });
-    return { content: S.content, files };
-  }
   window.LG_PREVIEW = null;
+  const previewData = () => ({ content: S.content, files: {} });
   function openPreview() {
     window.LG_PREVIEW = previewData();
     try { localStorage.setItem('lg-preview', JSON.stringify(S.content)); } catch (e) { /* cheio */ }
@@ -240,29 +227,60 @@
     if (S.previewWin && !S.previewWin.closed) { try { S.previewWin.location.reload(); } catch (e) { /* fechou */ } }
   }
 
-  /* ══════════ GITHUB ══════════ */
-  async function gh(path, opts = {}) {
-    const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(S.gh.owner)}/${encodeURIComponent(S.gh.repo)}${path}`, {
-      ...opts,
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${S.gh.token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-      },
-    });
-    if (!r.ok) {
-      let m = '';
-      try { m = (await r.json()).message; } catch (e) { /* sem corpo */ }
-      const err = new Error(m || r.statusText);
-      err.status = r.status;
-      throw err;
-    }
-    return r.status === 204 ? null : r.json();
+  /* ══════════ LOGIN ══════════ */
+  function showLogin(noApi) {
+    $('#app').hidden = true;
+    $('#login').hidden = false;
+    $('#noApiNote').hidden = !noApi;
+    $('#localMode').hidden = !noApi;
+    setTimeout(() => $('#loginUser').focus(), 50);
   }
-  const ref = () => encodeURIComponent(S.gh.branch);
+  const loginErr = m => { $('#loginErr').textContent = m || ''; };
 
+  $('#showPass').addEventListener('change', e => { $('#loginPass').type = e.target.checked ? 'text' : 'password'; });
+
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    loginErr('');
+    const btn = $('button[type=submit]', e.target);
+    btn.disabled = true; btn.textContent = 'Entrando…';
+    try {
+      const r = await api('login', { method: 'POST', body: JSON.stringify({ user: $('#loginUser').value, pass: $('#loginPass').value }) });
+      $('#loginPass').value = '';
+      S.user = r.user;
+      const me = await api('me');
+      S.storage = !!me.storage;
+      startApp();
+    } catch (err) {
+      if (err.status === 404) { loginErr('O servidor do painel não foi encontrado.'); showLogin(true); }
+      else loginErr(friendly(err));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Entrar';
+    }
+  });
+
+  $('#localMode').addEventListener('click', () => { S.local = true; startApp(); });
+
+  $('#logoutBtn').addEventListener('click', async () => {
+    if (S.dirty && !await ask('Sair sem publicar?', 'As alterações ficam guardadas como rascunho neste navegador e aparecem de novo quando você entrar.', { ok: 'Sair' })) return;
+    if (!S.local) { try { await api('logout', { method: 'POST' }); } catch (e) { /* já saiu */ } }
+    S.dirty = false;
+    location.reload();
+  });
+
+  async function boot() {
+    try {
+      const me = await api('me');
+      S.user = me.user;
+      S.storage = !!me.storage;
+      startApp();
+    } catch (e) {
+      // 401 = servidor ok, sem sessão · 404/erro de rede = sem servidor (arquivo local)
+      showLogin(e.status !== 401);
+    }
+  }
+
+  /* ══════════ INÍCIO DO PAINEL ══════════ */
   async function loadSiteContent() {
     try {
       const r = await fetch('../content.json', { cache: 'no-cache' });
@@ -270,155 +288,41 @@
     } catch (e) { /* sem arquivo */ }
     return {};
   }
-  async function loadRemote() {
-    try {
-      const j = await gh(`/contents/content.json?ref=${ref()}`);
-      if (j.content) return JSON.parse(td.decode(b64d(j.content.replace(/\s/g, ''))));
-      // arquivo > 1 MB: baixa pelo blob
-      const b = await gh(`/git/blobs/${j.sha}`);
-      return JSON.parse(td.decode(b64d(b.content.replace(/\s/g, ''))));
-    } catch (e) {
-      if (e.status === 404) {
-        toast('content.json ainda não existe no repositório — ele será criado ao publicar.');
-        return loadSiteContent();
-      }
+  async function loadContent() {
+    if (S.local) return loadSiteContent();
+    try { return await api('content?fresh=1'); }
+    catch (e) {
+      if (e.status === 404) return loadSiteContent(); // nada publicado ainda → começa do content.json do site
       throw e;
     }
   }
   async function loadMedia() {
-    if (S.local) { S.media = []; return; }
+    if (S.local || !S.storage) { S.media = []; return; }
     try {
-      const list = await gh(`/contents/uploads?ref=${ref()}`);
-      S.media = (Array.isArray(list) ? list : []).filter(f => f.type === 'file')
-        .map(f => ({ path: f.path, name: f.name, size: f.size, download_url: f.download_url, sha: f.sha }));
+      const r = await api('media');
+      S.media = (r.files || []).map(f => ({ path: f.url, url: f.url, name: f.pathname.split('/').pop(), size: f.size }));
     } catch (e) {
-      if (e.status !== 404) toast('Não consegui listar os arquivos: ' + friendly(e), true);
-      S.media = [];
+      toast('Não consegui listar os arquivos: ' + friendly(e), true);
     }
   }
 
-  /* ══════════ SENHA (token criptografado no navegador) ══════════ */
-  const canCrypto = !!(window.crypto && crypto.subtle && window.isSecureContext);
-  async function keyFrom(pass, salt) {
-    const base = await crypto.subtle.importKey('raw', te.encode(pass), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' },
-      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  }
-  async function seal(obj, pass) {
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const k = await keyFrom(pass, salt);
-    const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, te.encode(JSON.stringify(obj)));
-    return { v: 1, salt: b64e(salt), iv: b64e(iv), data: b64e(data) };
-  }
-  async function unseal(box, pass) {
-    const k = await keyFrom(pass, b64d(box.salt));
-    const buf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(box.iv) }, k, b64d(box.data));
-    return JSON.parse(td.decode(buf));
-  }
-  const readStore = () => { try { return JSON.parse(localStorage.getItem(STORE)); } catch (e) { return null; } };
-
-  /* ══════════ LOGIN ══════════ */
-  function showLogin() {
-    const st = readStore();
-    $('#cryptoNote').hidden = canCrypto;
-    const hasBox = st && st.box && canCrypto;
-    $('#unlockForm').hidden = !hasBox;
-    $('#setupForm').hidden = !!hasBox;
-    if (hasBox) {
-      $('#unlockInfo').textContent = `${st.owner}/${st.repo} · branch ${st.branch}`;
-      setTimeout(() => $('#unlockPass').focus(), 50);
-    } else if (st) {
-      $('#ghOwner').value = st.owner || '';
-      $('#ghRepo').value = st.repo || '';
-      $('#ghBranch').value = st.branch || 'main';
-    }
-    $('#newPass').closest('.field').hidden = !canCrypto;
-    $('#newPass').required = canCrypto;
-  }
-  const loginErr = m => { $('#loginErr').textContent = m || ''; };
-
-  $('#setupForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    loginErr('');
-    const btn = $('button[type=submit]', e.target);
-    const cfg = {
-      owner: $('#ghOwner').value.trim().replace(/^https?:\/\/github\.com\//i, '').split('/')[0],
-      repo: $('#ghRepo').value.trim().replace(/\.git$/, ''),
-      branch: $('#ghBranch').value.trim() || 'main',
-      token: $('#ghToken').value.trim(),
-    };
-    btn.disabled = true; btn.textContent = 'Verificando…';
-    try {
-      S.gh = cfg;
-      const repo = await gh('');
-      if (repo.permissions && !repo.permissions.push) throw Object.assign(new Error('x'), { status: 403 });
-      await gh(`/branches/${ref()}`).catch(err => { if (err.status === 404) throw new Error(`a branch “${cfg.branch}” não existe nesse repositório`); throw err; });
-      const store = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch };
-      if (canCrypto) store.box = await seal({ token: cfg.token }, $('#newPass').value);
-      localStorage.setItem(STORE, JSON.stringify(store));
-      $('#ghToken').value = ''; $('#newPass').value = '';
-      startApp();
-    } catch (err) {
-      S.gh = null;
-      loginErr('Não deu certo: ' + friendly(err));
-    } finally {
-      btn.disabled = false; btn.textContent = 'Conectar';
-    }
-  });
-
-  $('#unlockForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    loginErr('');
-    const st = readStore();
-    const btn = $('button[type=submit]', e.target);
-    btn.disabled = true; btn.textContent = 'Entrando…';
-    try {
-      const { token } = await unseal(st.box, $('#unlockPass').value);
-      S.gh = { owner: st.owner, repo: st.repo, branch: st.branch, token };
-      $('#unlockPass').value = '';
-      startApp();
-    } catch (err) {
-      loginErr('Senha incorreta.');
-    } finally {
-      btn.disabled = false; btn.textContent = 'Entrar';
-    }
-  });
-
-  $('#resetSetup').addEventListener('click', async () => {
-    if (!await ask('Configurar de novo?', 'Você vai precisar colar um token do GitHub e criar uma senha nova.', { ok: 'Configurar' })) return;
-    const st = readStore() || {};
-    delete st.box;
-    localStorage.setItem(STORE, JSON.stringify(st));
-    loginErr('');
-    showLogin();
-  });
-
-  $('#localMode').addEventListener('click', () => { S.local = true; startApp(); });
-
-  $('#logoutBtn').addEventListener('click', async () => {
-    if ((S.dirty || S.pending.size) && !await ask('Sair sem publicar?', 'As alterações de texto ficam salvas como rascunho neste navegador, mas os arquivos enviados e não publicados serão perdidos.', { ok: 'Sair', danger: true })) return;
-    S.dirty = false; S.pending.clear();
-    location.reload();
-  });
-
-  /* ══════════ INÍCIO DO PAINEL ══════════ */
   async function startApp() {
     $('#login').hidden = true;
     $('#app').hidden = false;
     $('#localBar').hidden = !S.local;
-    $('#repoLabel').textContent = S.local ? 'Modo local (sem GitHub)' : `${S.gh.owner}/${S.gh.repo}`;
+    $('#storageBar').hidden = S.local || S.storage;
+    $('#repoLabel').textContent = S.local ? 'Modo de teste' : `Olá, ${S.user}`;
     setStatus('saving', 'Carregando…');
     try {
-      S.content = ensureShape(S.local ? await loadSiteContent() : await loadRemote());
+      S.content = ensureShape(await loadContent());
     } catch (e) {
-      toast('Não consegui carregar o conteúdo do GitHub: ' + friendly(e), true);
+      toast('Não consegui carregar o conteúdo publicado: ' + friendly(e), true);
       S.content = ensureShape(await loadSiteContent());
     }
     await maybeRestoreDraft();
     renderAll();
     restoreTab();
-    loadMedia().then(() => { renderMedia(); renderProjects(); });
+    loadMedia().then(renderMedia);
   }
 
   async function maybeRestoreDraft() {
@@ -427,9 +331,7 @@
     if (!d || !d.content) return;
     if (JSON.stringify(ensureShape(d.content)) === JSON.stringify(S.content)) { clearDraft(); return; }
     const when = new Date(d.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-    const ok = await ask('Recuperar rascunho?',
-      `Existem alterações não publicadas de ${when}. Quer continuar de onde parou? (Arquivos enviados e não publicados precisam ser enviados de novo.)`,
-      { ok: 'Recuperar', cancel: 'Descartar' });
+    const ok = await ask('Recuperar rascunho?', `Existem alterações não publicadas de ${when}. Quer continuar de onde parou?`, { ok: 'Recuperar', cancel: 'Descartar' });
     if (ok) { S.content = ensureShape(d.content); S.dirty = true; } else clearDraft();
   }
 
@@ -459,7 +361,7 @@
   }
   $$('.tab').forEach(t => t.addEventListener('click', () => { showTab(t.dataset.tab); scrollTo(0, 0); }));
 
-  /* ══════════ UPLOAD DE ARQUIVOS ══════════ */
+  /* ══════════ ENVIO DE ARQUIVOS (direto para o Vercel Blob) ══════════ */
   const EXT = {
     'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/avif': 'avif',
     'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'application/pdf': 'pdf',
@@ -483,16 +385,37 @@
     } catch (e) { return file; }
   }
 
-  async function addUpload(file, { keep = false } = {}) {
+  let blobMod = null;
+  async function uploadFile(file, { quiet = false } = {}) {
+    if (S.local) throw new Error(LOCAL_UPLOAD);
+    if (!S.storage) throw new Error('O armazenamento não está ligado — conecte um Blob Store ao projeto na Vercel.');
     let f = file;
     if (f.type.startsWith('image/')) f = await optimizeImage(f);
-    if (f.size > 95 * 1048576) throw new Error(`“${file.name}” tem ${fmtSize(f.size)}. O limite é 95 MB — para vídeos grandes, suba no Vimeo/YouTube e cole o link.`);
+    if (!EXT[f.type]) throw new Error(`“${file.name}”: tipo de arquivo não aceito. Use JPG, PNG, WebP, GIF, MP4, WebM ou PDF.`);
+    if (f.size > 500 * 1048576) throw new Error(`“${file.name}” tem ${fmtSize(f.size)} — o limite é 500 MB. Para vídeos maiores, use Vimeo/YouTube.`);
+    if (!blobMod) {
+      try { blobMod = await import(BLOB_CLIENT); }
+      catch (e) { throw new Error('Não consegui carregar o módulo de envio (verifique a internet).'); }
+    }
     const d = new Date();
     const base = slug(file.name.replace(/\.[^.]+$/, '')) || 'arquivo';
-    const path = `uploads/${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${base}-${Math.random().toString(36).slice(2, 6)}.${extOf(f)}`;
-    S.pending.set(path, { file: f, url: URL.createObjectURL(f), size: f.size, name: path.split('/').pop(), type: f.type, keep });
-    if (f.size > 25 * 1048576) toast(`Arquivo grande (${fmtSize(f.size)}): a publicação pode demorar um pouco.`);
-    return path;
+    const pathname = `uploads/${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${base}.${extOf(f)}`;
+    const label = file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name;
+    if (!quiet) toast(`Enviando ${label}…`, false, true);
+    try {
+      const blob = await blobMod.upload(pathname, f, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+        contentType: f.type,
+        multipart: f.size > 20 * 1048576,
+        onUploadProgress: ({ percentage }) => { if (!quiet) toast(`Enviando ${label}… ${Math.round(percentage)}%`, false, true); },
+      });
+      S.media.unshift({ path: blob.url, url: blob.url, name: blob.pathname.split('/').pop(), size: f.size });
+      if (!quiet) toast('Arquivo enviado.');
+      return blob.url;
+    } catch (e) {
+      throw new Error('Falha no envio: ' + (e.message || 'erro desconhecido'));
+    }
   }
 
   // lê duração/proporção de um vídeo e captura um quadro para a capa
@@ -518,6 +441,10 @@
       v.onerror = () => finish({ d: 0, ar: 16 / 9 });
       setTimeout(() => finish({ d: 0, ar: 16 / 9 }), 15000);
     });
+  }
+  async function fileVideoInfo(file) {
+    const url = URL.createObjectURL(file);
+    try { return await videoInfo(url); } finally { URL.revokeObjectURL(url); }
   }
 
   /* ══════════ LINKS DE VÍDEO (Vimeo / YouTube) ══════════ */
@@ -617,20 +544,26 @@
           <label class="btn btn--sm">Enviar do computador<input type="file" accept="${video ? 'video/*' : 'image/*'}"></label>
           <button class="btn btn--sm btn--ghost" type="button" data-a="lib">Biblioteca</button>
           ${p ? '<button class="btn btn--sm btn--ghost" type="button" data-a="rm">Remover</button>' : ''}
-        </div>${S.pending.has(p) ? '<span class="pending">será enviado ao publicar</span>' : ''}</div>`;
+        </div></div>`;
       $('input', box).addEventListener('change', async e => {
         const f = e.target.files[0];
+        e.target.value = '';
         if (!f) return;
+        box.classList.add('is-busy');
         try {
-          const np = await addUpload(f);
+          const np = await uploadFile(f);
           setP(obj, path, np);
-          on(np);
+          await on(np, f);
           draw();
-        } catch (err) { toast(err.message, true); }
+        } catch (err) {
+          toast(err.message, true);
+        } finally {
+          box.classList.remove('is-busy');
+        }
       });
       $('[data-a="lib"]', box).addEventListener('click', async () => {
         const np = await pickMedia(video ? 'video' : 'image');
-        if (np) { setP(obj, path, np); on(np); draw(); }
+        if (np) { setP(obj, path, np); await on(np); draw(); }
       });
       const rm = $('[data-a="rm"]', box);
       if (rm) rm.addEventListener('click', () => { setP(obj, path, ''); on(''); draw(); });
@@ -756,11 +689,14 @@
       });
     };
     $('input', btns).addEventListener('change', async e => {
-      for (const f of e.target.files) {
-        try { listArr(obj, path).push(await addUpload(f)); } catch (err) { toast(err.message, true); }
-      }
+      const files = [...e.target.files];
       e.target.value = '';
-      draw(); on();
+      btns.classList.add('is-busy');
+      for (const f of files) {
+        try { listArr(obj, path).push(await uploadFile(f)); draw(); } catch (err) { toast(err.message, true); }
+      }
+      btns.classList.remove('is-busy');
+      on();
     });
     $('[data-a="lib"]', btns).addEventListener('click', async () => {
       const p = await pickMedia('image');
@@ -818,25 +754,19 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheetOpen) closeSheet(); });
 
   /* ══════════ BIBLIOTECA (escolher arquivo já enviado) ══════════ */
-  function allMedia() {
-    const list = S.media.filter(m => !S.deleted.has(m.path))
-      .map(m => ({ path: m.path, name: m.name, size: m.size, url: m.download_url, pending: false }));
-    S.pending.forEach((v, k) => list.unshift({ path: k, name: v.name, size: v.size, url: v.url, pending: true }));
-    return list;
-  }
   const prevHtml = m => {
-    const k = kindOf(m.path);
+    const k = kindOf(m.url);
     if (k === 'image') return `<img src="${esc(m.url)}" alt="" loading="lazy">`;
     if (k === 'video') return `<video src="${esc(m.url)}#t=0.5" muted preload="metadata"></video>`;
     return '📄';
   };
   function pickMedia(kind) {
     return new Promise(res => {
-      const items = allMedia().filter(m => kindOf(m.path) === kind);
+      const items = S.media.filter(m => kindOf(m.url) === kind);
       const d = el('div', 'confirm', `<div class="confirm__box" style="width:min(100%,760px);max-height:86vh;display:flex;flex-direction:column">
         <div class="row" style="justify-content:space-between"><h3>Escolher da biblioteca</h3><button type="button" class="icon-btn" data-x aria-label="Fechar">✕</button></div>
         <div class="media" style="overflow:auto">${items.length ? items.map(m => `
-          <button type="button" class="mi" data-p="${esc(m.path)}" style="padding:0;text-align:left;cursor:pointer">
+          <button type="button" class="mi" data-p="${esc(m.url)}" style="padding:0;text-align:left;cursor:pointer">
             <div class="mi__prev">${prevHtml(m)}</div><div class="mi__info"><span class="mi__n">${esc(m.name)}</span></div>
           </button>`).join('') : `<div class="empty" style="grid-column:1/-1">Nenhum${kind === 'video' ? ' vídeo' : 'a imagem'} na biblioteca ainda. Use “Enviar do computador”.</div>`}</div></div>`);
       document.body.append(d);
@@ -912,7 +842,6 @@
     list.innerHTML = a.map((p, i) => {
       const t = projThumb(p);
       const src = p.file ? 'Arquivo' : p.yt ? 'YouTube' : 'Vimeo';
-      const pend = [p.file, p.thumb].some(x => x && S.pending.has(x));
       return `<div class="proj${p.hidden ? ' is-off' : ''}" data-i="${i}">
         <span class="proj__handle" title="Arraste para reordenar">⠿</span>
         <div class="proj__thumb">${t.img ? `<img src="${esc(t.img)}" alt="" loading="lazy">` : t.video ? `<video src="${esc(t.video)}#t=0.5" muted preload="metadata"></video>` : ''}<b>${pad(i + 1)}</b></div>
@@ -920,7 +849,7 @@
           <span class="proj__t">${esc(p.t || 'Sem título')}</span>
           <div class="proj__m">
             <span class="chip chip--accent">${esc(catLabel(p.cat))}</span><span class="chip">${src}</span>
-            ${p.hidden ? '<span class="chip chip--warn">oculto</span>' : ''}${pend ? '<span class="chip chip--warn">arquivo a enviar</span>' : ''}
+            ${p.hidden ? '<span class="chip chip--warn">oculto</span>' : ''}
             ${p.y ? `<span>${esc(p.y)}</span>` : ''}${p.c ? `<span>${esc(p.c)}</span>` : ''}
           </div>
         </div>
@@ -968,6 +897,7 @@
   function editProject(orig, isNew) {
     const p = clone(orig);
     const catOpts = [{ v: '', l: '— sem categoria —' }, ...S.content.categories.map(c => ({ v: c.key, l: c.label }))];
+    let thumbField;
     openSheet(isNew ? 'Novo projeto' : 'Editar projeto', bodyEl => {
       bodyEl.append(
         fText(p, 't', 'Título', { on: noop }),
@@ -993,18 +923,19 @@
           }),
           el('div', 'or', 'ou'),
           fImage(p, 'file', 'Arquivo de vídeo do computador', {
-            accept: 'video', hint: 'MP4, até ~95 MB',
-            on: async v => {
+            accept: 'video', hint: 'MP4 de preferência',
+            on: async (v, file) => {
               if (!v) return;
               ['id', 'h', 'yt', 'th'].forEach(k => delete p[k]);
-              const pend = S.pending.get(v);
-              if (pend) {
-                const info = await videoInfo(pend.url);
+              if (file) {
+                const info = await fileVideoInfo(file);
                 if (info.d) p.d = info.d;
                 p.ar = info.ar;
                 if (!p.thumb && info.poster) {
-                  p.thumb = await addUpload(new File([info.poster], 'capa.webp', { type: 'image/webp' }));
-                  thumbField._redraw();
+                  try {
+                    p.thumb = await uploadFile(new File([info.poster], 'capa.webp', { type: 'image/webp' }), { quiet: true });
+                    if (thumbField) thumbField._redraw();
+                  } catch (e) { /* sem capa automática */ }
                 }
               }
               setTimeout(drawSrc, 0);
@@ -1013,7 +944,7 @@
         );
       };
       drawSrc();
-      const thumbField = fImage(p, 'thumb', 'Capa (thumbnail)', { on: noop, hint: 'opcional — sem capa, usa a do Vimeo/YouTube' });
+      thumbField = fImage(p, 'thumb', 'Capa (thumbnail)', { on: noop, hint: 'opcional — sem capa, usa a do Vimeo/YouTube' });
       bodyEl.append(
         fText(p, 'd', 'Duração (segundos)', { type: 'number', on: noop, hint: 'aparece como timecode no card' }),
         thumbField,
@@ -1036,7 +967,7 @@
           fetchMeta(target).then(m => { if (m.th) { target.th = m.th; renderProjects(); changed(); } }).catch(noop);
         }
         renderProjects(); renderCats(); changed();
-        toast(isNew ? 'Projeto adicionado.' : 'Projeto atualizado.');
+        toast(isNew ? 'Projeto adicionado. Clique em Publicar para ir ao ar.' : 'Projeto atualizado.');
       },
       onDelete: isNew ? null : async () => {
         if (!await ask('Excluir projeto?', `“${orig.t || 'Sem título'}” será removido do site.`, { ok: 'Excluir', danger: true })) return false;
@@ -1073,17 +1004,28 @@
   // adicionar vídeo do computador
   async function addVideoFile(f) {
     if (!f || !f.type.startsWith('video/')) return toast('Escolha um arquivo de vídeo (MP4 de preferência).', true);
+    if (S.local) return toast(LOCAL_UPLOAD, true);
     if (f.type === 'video/quicktime') toast('Arquivos .mov podem não tocar em todos os navegadores — MP4 é mais seguro.');
-    let path;
-    try { path = await addUpload(f); } catch (err) { return toast(err.message, true); }
-    toast('Lendo o vídeo…');
-    const info = await videoInfo(S.pending.get(path).url);
-    const p = {
-      file: path, t: f.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim(), c: '',
-      y: new Date().getFullYear(), cat: (S.content.categories[0] || {}).key || '', d: info.d, ar: info.ar,
-    };
-    if (info.poster) p.thumb = await addUpload(new File([info.poster], `capa-${f.name.replace(/\.[^.]+$/, '')}.webp`, { type: 'image/webp' }));
-    editProject(p, true);
+    const zone = $('#videoDrop');
+    zone.classList.add('is-busy');
+    try {
+      const info = await fileVideoInfo(f);
+      const url = await uploadFile(f);
+      const base = f.name.replace(/\.[^.]+$/, '');
+      const p = {
+        file: url, t: base.replace(/[-_]+/g, ' ').trim(), c: '',
+        y: new Date().getFullYear(), cat: (S.content.categories[0] || {}).key || '', d: info.d, ar: info.ar,
+      };
+      if (info.poster) {
+        try { p.thumb = await uploadFile(new File([info.poster], `capa-${base}.webp`, { type: 'image/webp' }), { quiet: true }); } catch (e) { /* sem capa */ }
+      }
+      renderMedia();
+      editProject(p, true);
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      zone.classList.remove('is-busy');
+    }
   }
   function dropzone(zone, onFiles) {
     const input = $('input[type=file]', zone);
@@ -1254,7 +1196,7 @@
       el('div', 'or', 'ou'),
       fImage(C.showreel, 'file', 'Arquivo de vídeo do computador', {
         accept: 'video', hint: 'usado só se não houver link',
-        on: v => { if (v) { C.showreel.id = ''; delete C.showreel.h; renderTexts(); } changed(); },
+        on: v => { if (v) { C.showreel.id = ''; delete C.showreel.h; setTimeout(renderTexts, 0); } changed(); },
       }),
     );
     return box;
@@ -1352,17 +1294,12 @@
   }
 
   /* ══════════ VISUAL ══════════ */
-  function onColor(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    const L = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
-    const lum = .2126 * L[0] + .7152 * L[1] + .0722 * L[2];
-    return (lum + .05) / .0524 >= .91 / (lum + .05) ? '#08080A' : '#F2EFE9';
-  }
   function lumOf(hex) {
     const n = parseInt(hex.slice(1), 16);
     const L = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
     return .2126 * L[0] + .7152 * L[1] + .0722 * L[2];
   }
+  const onColor = hex => { const lum = lumOf(hex); return (lum + .05) / .0524 >= .91 / (lum + .05) ? '#08080A' : '#F2EFE9'; };
   const contrast = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
 
   function applyAdminTheme() {
@@ -1456,7 +1393,7 @@
     const reset = el('button', 'btn', 'Voltar às cores originais');
     reset.type = 'button';
     reset.style.marginTop = '12px';
-    reset.addEventListener('click', () => { Object.assign(T, PRESETS[0]); delete T.name; renderVisual(); changed(); });
+    reset.addEventListener('click', () => { const { bg, fg, accent: a } = PRESETS[0]; Object.assign(T, { bg, fg, accent: a }); renderVisual(); changed(); });
     c.append(reset);
     P.append(c);
 
@@ -1468,40 +1405,47 @@
     const grid = $('#mediaGrid');
     if (!grid || !S.content) return;
     const used = usedPaths(S.content);
-    const items = allMedia();
-    grid.innerHTML = items.length ? '' : '<div class="empty" style="grid-column:1/-1">Nenhum arquivo enviado ainda.</div>';
+    const items = S.media;
+    grid.innerHTML = items.length ? '' : `<div class="empty" style="grid-column:1/-1">${S.local ? LOCAL_UPLOAD : 'Nenhum arquivo enviado ainda.'}</div>`;
     items.forEach(m => {
-      const it = el('div', 'mi' + (used.has(m.path) ? ' is-used' : ''), `
+      const it = el('div', 'mi' + (used.has(m.url) ? ' is-used' : ''), `
         <div class="mi__prev">${prevHtml(m)}</div>
         <div class="mi__info"><span class="mi__n" title="${esc(m.name)}">${esc(m.name)}</span>
-          <span class="mi__s">${fmtSize(m.size || 0)}${m.pending ? ' · a enviar' : ''}</span></div>
+          <span class="mi__s">${fmtSize(m.size || 0)}</span></div>
         <div class="mi__actions">
           <a class="icon-btn" href="${esc(m.url)}" target="_blank" rel="noopener" title="Abrir">↗</a>
           <button type="button" class="icon-btn icon-btn--danger" title="Excluir">✕</button>
         </div>`);
       $('button', it).addEventListener('click', async () => {
-        const inUse = used.has(m.path);
+        const inUse = used.has(m.url);
         const ok = await ask('Excluir arquivo?', inUse
-          ? `“${m.name}” está sendo usado no site. Se excluir, os lugares que usam ficam sem essa imagem/vídeo.`
-          : `“${m.name}” será apagado do site ao publicar.`, { ok: 'Excluir', danger: true });
+          ? `“${m.name}” está sendo usado no site. Se excluir, os lugares que usam ficam sem essa imagem/vídeo — publique em seguida.`
+          : `“${m.name}” será apagado.`, { ok: 'Excluir', danger: true });
         if (!ok) return;
-        if (m.pending) { URL.revokeObjectURL(S.pending.get(m.path).url); S.pending.delete(m.path); }
-        else S.deleted.add(m.path);
-        removeRefs(S.content, m.path);
-        renderAll();
-        changed();
+        try {
+          await api('media?url=' + encodeURIComponent(m.url), { method: 'DELETE' });
+          S.media = S.media.filter(x => x.url !== m.url);
+          if (inUse) { removeRefs(S.content, m.url); renderAll(); changed(); toast('Arquivo excluído. Clique em Publicar para atualizar o site.'); }
+          else { renderMedia(); toast('Arquivo excluído.'); }
+        } catch (e) {
+          toast('Não consegui excluir: ' + friendly(e), true);
+        }
       });
       grid.append(it);
     });
     const total = items.reduce((s, m) => s + (m.size || 0), 0);
-    $('#mediaInfo').textContent = items.length ? `${items.length} arquivo(s) · ${fmtSize(total)}${S.deleted.size ? ` · ${S.deleted.size} para apagar ao publicar` : ''}` : '';
+    $('#mediaInfo').textContent = items.length ? `${items.length} arquivo(s) · ${fmtSize(total)}` : '';
   }
   dropzone($('#mediaDrop'), async files => {
+    if (S.local) return toast(LOCAL_UPLOAD, true);
+    const zone = $('#mediaDrop');
+    zone.classList.add('is-busy');
     let n = 0;
     for (const f of files) {
-      try { await addUpload(f, { keep: true }); n++; } catch (err) { toast(err.message, true); }
+      try { await uploadFile(f); n++; renderMedia(); } catch (err) { toast(err.message, true); }
     }
-    if (n) { renderMedia(); changed(); toast(`${n} arquivo(s) adicionado(s). Publique para enviar ao site.`); }
+    zone.classList.remove('is-busy');
+    if (n) toast(`${n} arquivo(s) enviado(s). Escolha na “Biblioteca” de qualquer campo de imagem.`);
   });
 
   /* ══════════ PUBLICAR ══════════ */
@@ -1514,58 +1458,30 @@
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
-  const jsonOut = () => JSON.stringify(S.content, null, 2) + '\n';
-
-  function exportLocal() {
-    const used = usedPaths(S.content);
-    const files = [...S.pending].filter(([p, v]) => used.has(p) || v.keep);
-    download(new Blob([jsonOut()], { type: 'application/json' }), 'content.json');
-    files.forEach(([p, v], i) => setTimeout(() => download(v.file, p.split('/').pop()), 400 * (i + 1)));
-    S.dirty = false;
-    clearDraft();
-    setStatus();
-    toast(`Baixado! Coloque o content.json na raiz do site${files.length ? ` e os ${files.length} arquivo(s) na pasta uploads/` : ''}.`);
-  }
 
   async function publish() {
-    if (S.local) return exportLocal();
-    if (!S.dirty && !S.deleted.size && !S.pending.size) return toast('Nada para publicar.');
+    if (S.local) {
+      download(new Blob([JSON.stringify(S.content, null, 2) + '\n'], { type: 'application/json' }), 'content.json');
+      S.dirty = false; clearDraft(); setStatus();
+      return toast('content.json baixado.');
+    }
+    if (!S.dirty) return toast('Nada para publicar.');
     const btn = $('#publishBtn');
     btn.disabled = true;
     setStatus('saving');
     try {
-      const head = await gh(`/git/ref/heads/${ref()}`);
-      const base = head.object.sha;
-      const baseCommit = await gh(`/git/commits/${base}`);
-      const used = usedPaths(S.content);
-      const toSend = [...S.pending].filter(([p, v]) => used.has(p) || v.keep);
-      const tree = [];
-      let n = 0;
-      for (const [path, v] of toSend) {
-        n++;
-        setStatus('saving', `Enviando ${n}/${toSend.length}…`);
-        const blob = await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content: await blobToB64(v.file), encoding: 'base64' }) });
-        tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
-      }
-      S.deleted.forEach(path => tree.push({ path, mode: '100644', type: 'blob', sha: null }));
-      tree.push({ path: 'content.json', mode: '100644', type: 'blob', content: jsonOut() });
-      setStatus('saving', 'Salvando…');
-      const t = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree }) });
-      const msg = 'Atualiza o site pelo painel admin' + (toSend.length ? ` (+${toSend.length} arquivo${toSend.length > 1 ? 's' : ''})` : '');
-      const commit = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message: msg, tree: t.sha, parents: [base] }) });
-      await gh(`/git/refs/heads/${ref()}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
-
-      toSend.forEach(([p, v]) => S.published.set(p, v.url));
-      S.pending.forEach((v, p) => { if (!S.published.has(p)) URL.revokeObjectURL(v.url); });
-      S.pending.clear();
-      S.deleted.clear();
+      await api('content', { method: 'PUT', body: JSON.stringify(S.content) });
       S.dirty = false;
       clearDraft();
-      await loadMedia();
-      renderAll();
-      toast('Publicado! O site atualiza em cerca de 1 minuto.');
+      toast('Publicado! O site atualiza em até 1 minuto.');
     } catch (e) {
-      toast('Erro ao publicar: ' + friendly(e), true);
+      if (e.status === 401) {
+        toast('Sua sessão expirou — entre de novo. As alterações ficaram guardadas como rascunho.', true);
+        saveDraft();
+        setTimeout(() => { S.dirty = false; location.reload(); }, 2600);
+      } else {
+        toast('Erro ao publicar: ' + friendly(e), true);
+      }
     } finally {
       btn.disabled = false;
       setStatus();
@@ -1574,13 +1490,11 @@
 
   $('#publishBtn').addEventListener('click', publish);
   $('#previewBtn').addEventListener('click', openPreview);
-  addEventListener('beforeunload', e => {
-    if (S.dirty || S.pending.size || S.deleted.size) { e.preventDefault(); e.returnValue = ''; }
-  });
+  addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
   // Ctrl/Cmd + S publica
   addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && S.content) { e.preventDefault(); publish(); }
   });
 
-  showLogin();
+  boot();
 })();

@@ -3,40 +3,51 @@
 Site de portfólio de **Lucas Giron**, Creative Motion Director em Florianópolis.
 Motion design, vinhetas, aberturas e pacotes gráficos para broadcast.
 
-Site estático (HTML + CSS + JS puro, sem build). Todo o conteúdo — textos, projetos,
-fotos, seções e cores — fica em [`content.json`](content.json) e é editado pelo painel em **`/admin`**.
+Site estático (HTML + CSS + JS puro, sem build) com um **painel admin com login por usuário e senha**
+em `/admin`. Hospedado na **Vercel**: as funções em `api/` cuidam do login e o **Vercel Blob**
+guarda o conteúdo e os arquivos enviados.
 
 ## Estrutura
 
 ```
 index.html            página do site
-content.json          todo o conteúdo (editado pelo painel)
+content.json          conteúdo inicial (usado até a primeira publicação pelo painel)
 assets/css/style.css  visual do site
 assets/js/main.js     animações, grid de projetos, player
 admin/                painel de administração
-uploads/              fotos e vídeos enviados pelo painel (criada ao publicar)
-assets/thumbs/        thumbnails locais opcionais (ver baixar-thumbs.ps1)
+api/                  funções da Vercel: login, conteúdo, envio e mídia
+vercel.json           cabeçalhos (admin fora do Google, sem cache)
 ```
 
-## Hospedagem
+## Colocar no ar na Vercel (uma vez só)
 
-Qualquer hospedagem de site estático serve — basta enviar os arquivos desta pasta.
-Não precisa de servidor, banco de dados nem build.
+1. **Importar o projeto** — em [vercel.com/new](https://vercel.com/new), escolha o repositório
+   `Portifolio-Lucas-Giron`. Em *Framework Preset* deixe **Other** e clique em **Deploy**.
+2. **Ligar o armazenamento** — no projeto: **Storage → Create → Blob**.
+   Escolha acesso **Public**, dê um nome (ex.: `portfolio`) e conecte ao projeto.
+   Isso cria sozinho a variável `BLOB_READ_WRITE_TOKEN`.
+3. **Criar o login** — em **Settings → Environment Variables**, adicione:
 
-## Painel admin
+   | Nome             | Valor                                   |
+   |------------------|-----------------------------------------|
+   | `ADMIN_USER`     | o usuário do painel (ex.: `lucas`)      |
+   | `ADMIN_PASSWORD` | uma senha forte (12+ caracteres)        |
 
-O painel edita o `content.json` e envia arquivos **para este repositório no GitHub**
-(1 commit por publicação). Para as alterações aparecerem no site, a hospedagem precisa
-publicar a partir deste repositório automaticamente (ex.: Vercel, Netlify ou Cloudflare Pages
-conectados ao GitHub). Se a hospedagem for manual (FTP etc.), use o botão
-**“Testar sem GitHub”** do painel: ele baixa o `content.json` e os arquivos para você enviar.
+4. **Deploy de novo** — em **Deployments**, clique nos três pontinhos do último deploy → **Redeploy**
+   (as variáveis só valem a partir de um deploy novo).
+5. Abra `https://SEU-SITE.vercel.app/admin/` e entre com o usuário e a senha.
 
-1. Abra `seu-site.com/admin/`.
-2. Na primeira vez, informe usuário (`SamuelMadeiraa`), repositório (`Portifolio-Lucas-Giron`), branch (`main`)
-   e um **token do GitHub** com permissão *Contents: Read and write* só neste repositório
-   (o próprio painel mostra o passo a passo). Crie uma senha — o token fica guardado
-   criptografado com ela, só naquele navegador.
-3. Edite o que quiser e clique em **Publicar**.
+**Trocar a senha:** mude `ADMIN_PASSWORD` na Vercel e faça **Redeploy**. Isso também desconecta
+quem estiver logado.
+
+## Como funciona o painel
+
+- **Publicar** salva o conteúdo no Vercel Blob. O site mostra a versão nova em até 1 minuto.
+  As 20 últimas publicações ficam guardadas como histórico.
+- **Fotos e vídeos** sobem direto do navegador para o Blob (até 500 MB por arquivo).
+  Imagens grandes são reduzidas e convertidas para WebP antes de subir.
+- **Pré-visualizar** abre o site com as alterações antes de publicar.
+- Alterações não publicadas ficam salvas como rascunho no navegador.
 
 O painel permite:
 
@@ -44,14 +55,21 @@ O painel permite:
 - **Seções** — criar seções novas além do "Sobre", com texto, imagem, galeria e botão.
 - **Textos** — todos os textos do site, foto do "Sobre", números, ferramentas, serviços, clientes, contato e links.
 - **Visual** — cores (destaque, fundo, texto), textura, ligar/desligar partes do site.
-- **Mídia** — enviar e excluir arquivos (imagens grandes são otimizadas automaticamente).
+- **Mídia** — enviar e excluir arquivos.
 
 Nos textos longos, use `*itálico*` e `**negrito**`.
 
 ## Rodar localmente
 
-Qualquer servidor estático na pasta do projeto, por exemplo:
+Com a [Vercel CLI](https://vercel.com/docs/cli) (precisa do Node 20+), na pasta do projeto:
 
 ```bash
-npx serve .
+npm install
 ```
+
+```bash
+vercel dev
+```
+
+Sem a CLI, qualquer servidor estático mostra o site; o painel abre em **modo de teste**
+(edita e baixa o `content.json`, sem login e sem envio de arquivos).
