@@ -22,12 +22,12 @@ assets/thumbs/        thumbnails locais opcionais (ver baixar-thumbs.ps1)
 
 1. No repositório: **Settings → Pages**.
 2. Em **Source**, escolha **Deploy from a branch**, branch **main**, pasta **/ (root)** e salve.
-3. Em ~1 minuto o site fica em `https://SEU-USUARIO.github.io/portifolio-lucas-giron/`.
+3. Em ~1 minuto o site fica em `https://samuelmadeiraa.github.io/Portifolio-Lucas-Giron/`.
 
 ## Usar o painel admin
 
-1. Abra `https://SEU-USUARIO.github.io/portifolio-lucas-giron/admin/`.
-2. Na primeira vez, informe usuário, repositório (`portifolio-lucas-giron`), branch (`main`)
+1. Abra `https://samuelmadeiraa.github.io/Portifolio-Lucas-Giron/admin/`.
+2. Na primeira vez, informe usuário (`SamuelMadeiraa`), repositório (`Portifolio-Lucas-Giron`), branch (`main`)
    e um **token do GitHub** com permissão *Contents: Read and write* só neste repositório
    (o próprio painel mostra o passo a passo). Crie uma senha — o token fica guardado
    criptografado com ela, só naquele navegador.
