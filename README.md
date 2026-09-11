@@ -18,20 +18,25 @@ uploads/              fotos e vídeos enviados pelo painel (criada ao publicar)
 assets/thumbs/        thumbnails locais opcionais (ver baixar-thumbs.ps1)
 ```
 
-## Publicar no GitHub Pages
+## Hospedagem
 
-1. No repositório: **Settings → Pages**.
-2. Em **Source**, escolha **Deploy from a branch**, branch **main**, pasta **/ (root)** e salve.
-3. Em ~1 minuto o site fica em `https://samuelmadeiraa.github.io/Portifolio-Lucas-Giron/`.
+Qualquer hospedagem de site estático serve — basta enviar os arquivos desta pasta.
+Não precisa de servidor, banco de dados nem build.
 
-## Usar o painel admin
+## Painel admin
 
-1. Abra `https://samuelmadeiraa.github.io/Portifolio-Lucas-Giron/admin/`.
+O painel edita o `content.json` e envia arquivos **para este repositório no GitHub**
+(1 commit por publicação). Para as alterações aparecerem no site, a hospedagem precisa
+publicar a partir deste repositório automaticamente (ex.: Vercel, Netlify ou Cloudflare Pages
+conectados ao GitHub). Se a hospedagem for manual (FTP etc.), use o botão
+**“Testar sem GitHub”** do painel: ele baixa o `content.json` e os arquivos para você enviar.
+
+1. Abra `seu-site.com/admin/`.
 2. Na primeira vez, informe usuário (`SamuelMadeiraa`), repositório (`Portifolio-Lucas-Giron`), branch (`main`)
    e um **token do GitHub** com permissão *Contents: Read and write* só neste repositório
    (o próprio painel mostra o passo a passo). Crie uma senha — o token fica guardado
    criptografado com ela, só naquele navegador.
-3. Edite o que quiser e clique em **Publicar**. O site atualiza em cerca de 1 minuto.
+3. Edite o que quiser e clique em **Publicar**.
 
 O painel permite:
 
