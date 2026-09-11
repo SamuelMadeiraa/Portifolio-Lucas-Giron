@@ -6,6 +6,7 @@
    ═══════════════════════════════════════════════════════════ */
 import { handleUpload } from '@vercel/blob/client';
 import { session } from './_lib/auth.js';
+import { mode } from './_lib/storage.js';
 
 const TYPES = [
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/svg+xml',
@@ -16,6 +17,7 @@ const TYPES = [
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido.' });
+  if (mode() !== 'blob') return res.status(400).json({ error: 'Vercel Blob não configurado (no servidor próprio o envio usa /api/upload-file).' });
   try {
     const result = await handleUpload({
       body: req.body,

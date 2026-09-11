@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════════════════
+#  Subir na VPS:   docker compose up -d --build
+#  - site:  o portfólio + painel (porta interna 3000)
+#  - caddy: HTTPS automático (Let's Encrypt) na frente do site
+#  Configure antes o arquivo .env (copie de .env.example).
+# ═══════════════════════════════════════════════════════════
+name: portfolio
+
+services:
+  site:
+    build: .
+    image: portifolio-lucas-giron:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      PORT: "3000"
+    volumes:
+      - dados:/data           # conteúdo publicado + fotos e vídeos enviados
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - site
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no arquivo .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  dados:
+  caddy_data:
+  caddy_config:

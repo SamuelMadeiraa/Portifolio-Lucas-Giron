@@ -56,13 +56,16 @@ function readCookie(req, name) {
 
 export const session = req => (configured() ? verify(readCookie(req, COOKIE)) : null);
 
+// cookie só por HTTPS (COOKIE_SECURE=false libera HTTP, só para testes sem domínio)
+const secureFlag = () => (process.env.COOKIE_SECURE === 'false' ? '' : ' Secure;');
+
 export function setSession(res, user) {
   const token = sign({ u: user, exp: Date.now() + MAX_AGE * 1000 });
-  res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${MAX_AGE}`);
+  res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; HttpOnly;${secureFlag()} SameSite=Strict; Max-Age=${MAX_AGE}`);
 }
 
 export function clearSession(res) {
-  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly;${secureFlag()} SameSite=Strict; Max-Age=0`);
 }
 
 // exige login; em alterações exige também o cabeçalho do painel (bloqueia pedidos vindos de outros sites)
@@ -79,5 +82,4 @@ export function requireAdmin(req, res) {
   return true;
 }
 
-export const hasStorage = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 export const wait = ms => new Promise(r => setTimeout(r, ms));

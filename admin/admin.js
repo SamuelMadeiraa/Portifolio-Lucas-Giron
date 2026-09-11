@@ -71,6 +71,7 @@
     content: null,    // o conteúdo sendo editado
     dirty: false,
     media: [],        // arquivos enviados: { path, url, name, size }
+    uploadMode: 'blob', // 'blob' = Vercel Blob · 'direct' = servidor próprio (Docker)
     previewWin: null,
   };
 
@@ -129,7 +130,7 @@
   }
 
   // arquivo enviado pelo painel? (URL do Blob ou caminho uploads/)
-  const isUpload = v => typeof v === 'string' && (v.startsWith('uploads/') || /\.blob\.vercel-storage\.com\/uploads\//.test(v));
+  const isUpload = v => typeof v === 'string' && (v.startsWith('uploads/') || v.startsWith('/uploads/') || /\.blob\.vercel-storage\.com\/uploads\//.test(v));
   function usedPaths(c) {
     const set = new Set();
     (function walk(v) {
@@ -152,7 +153,7 @@
     })(c);
   }
 
-  const assetUrl = p => (!p ? '' : /^(https?:|data:|blob:)/.test(p) ? p : '../' + p);
+  const assetUrl = p => (!p ? '' : /^(https?:|data:|blob:|\/)/.test(p) ? p : '../' + p);
   const kindOf = p => /\.(jpe?g|png|webp|gif|svg|avif)(\?|$)/i.test(p) ? 'image' : /\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(p) ? 'video' : 'file';
 
   /* ══════════ TOAST / CONFIRMAÇÃO ══════════ */
@@ -250,6 +251,7 @@
       S.user = r.user;
       const me = await api('me');
       S.storage = !!me.storage;
+      S.uploadMode = me.uploadMode || 'blob';
       startApp();
     } catch (err) {
       if (err.status === 404) { loginErr('O servidor do painel não foi encontrado.'); showLogin(true); }
@@ -273,6 +275,7 @@
       const me = await api('me');
       S.user = me.user;
       S.storage = !!me.storage;
+      S.uploadMode = me.uploadMode || 'blob';
       startApp();
     } catch (e) {
       // 401 = servidor ok, sem sessão · 404/erro de rede = sem servidor (arquivo local)
@@ -385,6 +388,25 @@
     } catch (e) { return file; }
   }
 
+  // servidor próprio (Docker): o arquivo vai direto no corpo da requisição, com progresso
+  function xhrUpload(pathname, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', '/api/upload-file?name=' + encodeURIComponent(pathname));
+      x.setRequestHeader('X-LG-Admin', '1');
+      x.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total * 100); };
+      x.onload = () => {
+        let d = null;
+        try { d = JSON.parse(x.responseText); } catch (e) { /* sem JSON */ }
+        if (x.status >= 200 && x.status < 300 && d && d.url) resolve(d);
+        else reject(new Error((d && d.error) || (x.status === 413 ? 'arquivo grande demais' : `erro ${x.status}`)));
+      };
+      x.onerror = () => reject(new Error('sem conexão com o servidor'));
+      x.send(file);
+    });
+  }
+
   let blobMod = null;
   async function uploadFile(file, { quiet = false } = {}) {
     if (S.local) throw new Error(LOCAL_UPLOAD);
@@ -393,23 +415,29 @@
     if (f.type.startsWith('image/')) f = await optimizeImage(f);
     if (!EXT[f.type]) throw new Error(`“${file.name}”: tipo de arquivo não aceito. Use JPG, PNG, WebP, GIF, MP4, WebM ou PDF.`);
     if (f.size > 500 * 1048576) throw new Error(`“${file.name}” tem ${fmtSize(f.size)} — o limite é 500 MB. Para vídeos maiores, use Vimeo/YouTube.`);
-    if (!blobMod) {
-      try { blobMod = await import(BLOB_CLIENT); }
-      catch (e) { throw new Error('Não consegui carregar o módulo de envio (verifique a internet).'); }
-    }
     const d = new Date();
     const base = slug(file.name.replace(/\.[^.]+$/, '')) || 'arquivo';
     const pathname = `uploads/${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${base}.${extOf(f)}`;
     const label = file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name;
+    const progress = pct => { if (!quiet) toast(`Enviando ${label}… ${Math.round(pct)}%`, false, true); };
     if (!quiet) toast(`Enviando ${label}…`, false, true);
     try {
-      const blob = await blobMod.upload(pathname, f, {
-        access: 'public',
-        handleUploadUrl: '/api/upload',
-        contentType: f.type,
-        multipart: f.size > 20 * 1048576,
-        onUploadProgress: ({ percentage }) => { if (!quiet) toast(`Enviando ${label}… ${Math.round(percentage)}%`, false, true); },
-      });
+      let blob;
+      if (S.uploadMode === 'direct') {
+        blob = await xhrUpload(pathname, f, progress);
+      } else {
+        if (!blobMod) {
+          try { blobMod = await import(BLOB_CLIENT); }
+          catch (e) { throw new Error('não consegui carregar o módulo de envio (verifique a internet)'); }
+        }
+        blob = await blobMod.upload(pathname, f, {
+          access: 'public',
+          handleUploadUrl: '/api/upload',
+          contentType: f.type,
+          multipart: f.size > 20 * 1048576,
+          onUploadProgress: ({ percentage }) => progress(percentage),
+        });
+      }
       S.media.unshift({ path: blob.url, url: blob.url, name: blob.pathname.split('/').pop(), size: f.size });
       if (!quiet) toast('Arquivo enviado.');
       return blob.url;
