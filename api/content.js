@@ -1,47 +1,67 @@
-/* ═══════════════════════════════════════════════════════════
-   /api/content
-   GET  → conteúdo publicado (público; o site lê daqui)
-   PUT  → salva o conteúdo (só com login)
-   Cada publicação vira uma versão nova; as 20 mais recentes
-   ficam guardadas como histórico (ver _lib/storage.js).
-   ═══════════════════════════════════════════════════════════ */
-import { requireAdmin } from './_lib/auth.js';
-import { mode, getContent, saveContent } from './_lib/storage.js';
+import { get, put, list, del } from '@vercel/blob';
+import { isAuthed, json, unauthorized, status, CONTENT_PATH, VERSIONS_DIR, KEEP_VERSIONS } from './_lib.js';
 
-export default async function handler(req, res) {
-  if (req.method === 'GET' || req.method === 'HEAD') {
-    const fresh = req.query && 'fresh' in req.query;
-    res.setHeader('Cache-Control', fresh ? 'private, no-store' : 'public, max-age=0, s-maxage=30, stale-while-revalidate=300');
-    if (!mode()) return res.status(404).json({ error: 'Armazenamento não configurado.' });
-    try {
-      const data = await getContent();
-      if (!data) return res.status(404).json({ error: 'Nada publicado ainda.' });
-      return res.status(200).json(data);
-    } catch (e) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(500).json({ error: 'Não foi possível ler o conteúdo.' });
+const MAX_BYTES = 1_000_000;
+
+// GET /api/content → conteúdo publicado (público, com cache curto na CDN)
+export async function GET(request) {
+  if (!status().blob) return json({ error: 'not-configured' }, 404);
+
+  const fresh = new URL(request.url).searchParams.has('fresh');
+  const result = await get(CONTENT_PATH, { access: 'public', useCache: false }).catch(() => null);
+  if (!result || result.statusCode !== 200) return json({ error: 'empty' }, 404);
+
+  const text = await new Response(result.stream).text();
+  return new Response(text, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      // o painel pede ?fresh para sempre ver a última versão
+      'cache-control': fresh ? 'no-store' : 'public, max-age=0, s-maxage=10, stale-while-revalidate=60',
+    },
+  });
+}
+
+// PUT /api/content → publica um novo conteúdo e guarda uma cópia no histórico
+export async function PUT(request) {
+  if (!(await isAuthed(request))) return unauthorized();
+  if (!status().blob) return json({ error: 'Blob não configurado na Vercel (BLOB_READ_WRITE_TOKEN).' }, 503);
+
+  const text = await request.text();
+  if (text.length > MAX_BYTES) return json({ error: 'Conteúdo grande demais.' }, 413);
+
+  let data;
+  try { data = JSON.parse(text); } catch { return json({ error: 'JSON inválido.' }, 400); }
+  if (!data || typeof data !== 'object' || !Array.isArray(data.projects)) {
+    return json({ error: 'Formato inesperado: falta a lista de projetos.' }, 400);
+  }
+
+  // não deixa publicar por cima de uma versão mais nova (outra aba / outro aparelho)
+  const base = request.headers.get('x-base-saved-at');
+  if (base !== null) {
+    const cur = await get(CONTENT_PATH, { access: 'public', useCache: false }).catch(() => null);
+    if (cur && cur.statusCode === 200) {
+      let curSaved = '';
+      try { curSaved = JSON.parse(await new Response(cur.stream).text()).savedAt || ''; } catch {}
+      if (curSaved && curSaved !== base) return json({ error: 'conflict', savedAt: curSaved }, 409);
     }
   }
 
-  if (req.method === 'PUT') {
-    if (!requireAdmin(req, res)) return;
-    if (!mode()) {
-      return res.status(500).json({ error: 'Armazenamento não configurado: na Vercel, conecte um Blob Store (público) ao projeto; no servidor próprio, defina DATA_DIR.' });
-    }
-    const data = req.body;
-    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.projects)) {
-      return res.status(400).json({ error: 'Conteúdo inválido.' });
-    }
-    const json = JSON.stringify(data, null, 2);
-    if (json.length > 3_000_000) return res.status(413).json({ error: 'Conteúdo grande demais.' });
-    try {
-      await saveContent(json);
-      return res.status(200).json({ ok: true, savedAt: Date.now() });
-    } catch (e) {
-      return res.status(500).json({ error: e.message || 'Falha ao salvar.' });
-    }
-  }
+  data.savedAt = new Date().toISOString();
+  const body = JSON.stringify(data);
+  const opts = { access: 'public', addRandomSuffix: false, contentType: 'application/json' };
 
-  res.setHeader('Allow', 'GET, PUT');
-  return res.status(405).json({ error: 'Método não permitido.' });
+  await put(CONTENT_PATH, body, { ...opts, allowOverwrite: true, cacheControlMaxAge: 60 });
+  await put(`${VERSIONS_DIR}${data.savedAt.replace(/[:.]/g, '-')}.json`, body, opts);
+
+  // mantém só as últimas N versões
+  try {
+    const { blobs } = await list({ prefix: VERSIONS_DIR, limit: 1000 });
+    const old = blobs
+      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
+      .slice(KEEP_VERSIONS)
+      .map(b => b.url);
+    if (old.length) await del(old);
+  } catch {}
+
+  return json({ ok: true, savedAt: data.savedAt });
 }

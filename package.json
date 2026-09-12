@@ -1,11 +1,7 @@
 {
-  "name": "portifolio-lucas-giron",
+  "name": "lucas-giron",
   "private": true,
-  "description": "Portfólio de Lucas Giron — site estático + painel admin com login (funções da Vercel + Vercel Blob).",
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
   "dependencies": {
     "@vercel/blob": "2.8.0"
   }

@@ -1,156 +1,85 @@
-# Portfólio — Lucas Giron
+# Lucas Giron — Portfólio
 
-Site de portfólio de **Lucas Giron**, Creative Motion Director em Florianópolis.
-Motion design, vinhetas, aberturas e pacotes gráficos para broadcast.
+Site one-page com **painel de administração** em `/admin`. Pelo painel dá para mudar
+tudo do site sem mexer em código — com criar / editar / reordenar / excluir para:
 
-Site estático (HTML + CSS + JS puro, sem build) com um **painel admin com login por usuário e senha**
-em `/admin`. Roda de dois jeitos, com o mesmo código:
+- **Projetos** (upload de vídeo que toca direto no site, ou link do Vimeo) e **categorias**
+- **Seções**: reordenar, ocultar e criar novas (texto, galeria, vídeo em destaque, cards,
+  chamada com botão, faixa de palavras)
+- **Menu**: links para qualquer seção ou link externo
+- Textos, números, ferramentas, serviços, clientes, contato, rodapé, SEO
+- **Aparência**: cores (com paletas prontas), fontes do Google Fonts e efeitos
 
-- **Vercel** — as funções em `api/` cuidam do login e o **Vercel Blob** guarda conteúdo e arquivos.
-- **Servidor próprio (VPS Ubuntu) com Docker** — um servidor Node pequeno serve tudo e guarda
-  conteúdo e arquivos numa pasta de dados (volume do Docker), com HTTPS automático pelo Caddy.
-
-## Estrutura
+Publicar de uma aba/aparelho desatualizado não apaga nada: o painel detecta que o site
+mudou e junta só o que você alterou por cima da versão mais nova.
 
 ```
-index.html            página do site
-content.json          conteúdo inicial (usado até a primeira publicação pelo painel)
-assets/               visual (css) e animações (js) do site
-admin/                painel de administração
-api/                  rotas: login, logout, me, content, media, upload (Vercel) e upload-file (Docker)
-api/_lib/             login (auth.js) e armazenamento (storage.js: Vercel Blob ou disco)
-server/server.js      servidor para Docker/VPS (sem dependências extras)
-Dockerfile            imagem do servidor
-docker-compose.yml    servidor + Caddy (HTTPS)
-Caddyfile             configuração do HTTPS
-.env.example          modelo das configurações da VPS
-vercel.json           cabeçalhos na Vercel
+index.html              ← estrutura da página (os textos vêm do conteúdo)
+assets/
+  css/style.css
+  js/content.js         ← conteúdo PADRÃO (usado até a primeira publicação)
+  js/schema.js          ← fontes disponíveis + migração de conteúdos antigos
+  js/main.js            ← carrega o conteúdo e monta o site
+  thumbs/*.jpg          ← capas originais dos projetos do Vimeo
+admin/                  ← painel (index.html, admin.css, admin.js)
+api/                    ← funções da Vercel (login, conteúdo, upload, mídias, histórico)
+tools/dev-server.ps1    ← servidor local que imita a API (não vai para o deploy)
 ```
 
----
+## Como funciona
 
-## Opção 1 — Vercel
+- O conteúdo do site inteiro é um JSON salvo no **Vercel Blob**. O painel edita um
+  rascunho; **Publicar** grava o JSON e guarda uma cópia no histórico (últimas 30).
+- Vídeos e imagens enviados pelo painel vão direto do navegador para o Blob
+  (sem limite de tamanho das funções) e tocam num `<video>` nativo no site.
+  Projetos antigos do Vimeo continuam funcionando — cada projeto pode ter arquivo
+  próprio **ou** link do Vimeo (o arquivo tem prioridade).
+- Se a API estiver fora do ar, o site usa `assets/js/content.js` — ele nunca fica em branco.
 
-1. **Importar o projeto** — em [vercel.com/new](https://vercel.com/new), escolha o repositório
-   `Portifolio-Lucas-Giron`. Em *Framework Preset* deixe **Other** e clique em **Deploy**.
-2. **Ligar o armazenamento** — no projeto: **Storage → Create → Blob**.
-   Escolha acesso **Public**, dê um nome (ex.: `portfolio`) e conecte ao projeto.
-   Isso cria sozinho a variável `BLOB_READ_WRITE_TOKEN`.
-3. **Criar o login** — em **Settings → Environment Variables**, adicione:
+## Colocar no ar (Vercel) — uma vez só
 
-   | Nome             | Valor                                   |
-   |------------------|-----------------------------------------|
-   | `ADMIN_USER`     | o usuário do painel (ex.: `lucas`)      |
-   | `ADMIN_PASSWORD` | uma senha forte (12+ caracteres)        |
+1. **Blob:** no projeto `lucas-giron` na Vercel → **Storage** → **Create** → **Blob**,
+   acesso **Public**, e conecte ao projeto. Isso cria a variável `BLOB_READ_WRITE_TOKEN`.
+2. **Senha:** **Settings → Environment Variables** → adicione `ADMIN_PASSWORD` com uma
+   senha forte (Production). Opcional: `SESSION_SECRET` com um texto aleatório longo.
+3. Faça um novo deploy (as variáveis só valem para deploys feitos depois).
+4. Acesse `https://SEU-DOMINIO/admin` e entre com a senha.
 
-4. **Deploy de novo** — em **Deployments**, clique nos três pontinhos do último deploy → **Redeploy**
-   (as variáveis só valem a partir de um deploy novo).
-5. Abra `https://SEU-SITE.vercel.app/admin/` e entre com o usuário e a senha.
+Trocar a `ADMIN_PASSWORD` desconecta todas as sessões abertas.
 
-**Trocar a senha:** mude `ADMIN_PASSWORD` na Vercel e faça **Redeploy**.
+## Trocar a senha
 
----
+Depois de entrar, o painel tem a aba **Senha**: informe a senha atual, a nova (mínimo de
+8 caracteres) e confirme. Vale na hora, sem precisar publicar.
 
-## Opção 2 — VPS Ubuntu com Docker
+- A `ADMIN_PASSWORD` é só a **senha inicial**. Depois da primeira troca pelo painel, vale
+  a senha nova (a variável deixa de funcionar para entrar).
+- A senha nova fica no Blob embaralhada (HMAC com o segredo do servidor), nunca em texto
+  puro — e o arquivo tem nome derivado desse segredo.
+- Trocar a senha derruba as sessões abertas em outros aparelhos.
+- **Esqueceu?** Apague o arquivo que começa com `site/auth-` em **Vercel → Storage → Blob**.
+  A senha volta a ser a da variável `ADMIN_PASSWORD`.
 
-Precisa de uma VPS com Ubuntu e, de preferência, um domínio.
-No painel do seu domínio, crie um registro **A** apontando para o **IP da VPS**.
+## Rodar localmente (sem Node)
 
-**1. Instalar o Docker** (uma vez só, logado na VPS por SSH):
-
-```bash
-curl -fsSL https://get.docker.com | sudo sh
+```
+powershell -ExecutionPolicy Bypass -File tools/dev-server.ps1
 ```
 
-**2. Baixar o projeto:**
+- Site: http://localhost:5500 · Painel: http://localhost:5500/admin (senha local: `admin`)
+- O servidor local imita a API e guarda tudo em `.dev-data/` (ignorado pelo git e pelo deploy).
 
-```bash
-git clone https://github.com/SamuelMadeiraa/Portifolio-Lucas-Giron.git portfolio && cd portfolio
-```
+## Dicas para os vídeos
 
-**3. Configurar** — copie o modelo e edite (domínio, usuário e senha do painel):
+- Prefira **MP4 (H.264)**: toca em todos os navegadores e celulares.
+- Exporte já comprimido (ex.: 1080p, 6–10 Mbps). Arquivos menores carregam mais rápido e
+  consomem menos da cota de transferência do Blob.
+- Ao enviar, a duração e a capa (frame do segundo 1) são preenchidas sozinhas. A capa pode
+  ser trocada por uma imagem ou capturada em outro segundo.
+- Na aba **Mídias** dá para ver o espaço usado e apagar arquivos que ninguém usa mais.
 
-```bash
-cp .env.example .env && nano .env
-```
+## Custos
 
-Para gerar o `SESSION_SECRET`:
-
-```bash
-openssl rand -hex 32
-```
-
-**4. Subir:**
-
-```bash
-sudo docker compose up -d --build
-```
-
-Pronto: o site fica em `https://seudominio.com.br` e o painel em `https://seudominio.com.br/admin/`.
-O Caddy gera o certificado HTTPS sozinho na primeira visita (as portas 80 e 443 precisam estar liberadas).
-
-**Sem domínio (só para testar pelo IP):** no `.env`, use `DOMAIN=:80` e `COOKIE_SECURE=false`,
-e acesse `http://IP-DA-VPS`. Não use assim em produção — a senha trafega sem criptografia.
-
-### No dia a dia
-
-Atualizar o site depois de mudanças no código:
-
-```bash
-git pull && sudo docker compose up -d --build
-```
-
-Ver os logs:
-
-```bash
-sudo docker compose logs -f site
-```
-
-Trocar a senha: edite o `.env` e rode `sudo docker compose up -d`.
-
-**Backup** — tudo o que o painel salva (conteúdo, fotos e vídeos) fica no volume `portfolio_dados`:
-
-```bash
-sudo docker run --rm -v portfolio_dados:/data -v "$PWD":/backup alpine tar czf /backup/backup-portfolio.tgz -C /data .
-```
-
-Restaurar um backup:
-
-```bash
-sudo docker run --rm -v portfolio_dados:/data -v "$PWD":/backup alpine sh -c "cd /data && tar xzf /backup/backup-portfolio.tgz"
-```
-
----
-
-## Como funciona o painel
-
-- **Publicar** salva o conteúdo; as 20 últimas publicações ficam guardadas como histórico.
-  Na Vercel o site mostra a versão nova em até 1 minuto; na VPS, na hora.
-- **Fotos e vídeos** sobem direto do navegador (até 500 MB por arquivo; na VPS o limite é o `MAX_UPLOAD_MB`).
-  Imagens grandes são reduzidas e convertidas para WebP antes de subir.
-- **Pré-visualizar** abre o site com as alterações antes de publicar.
-- Alterações não publicadas ficam salvas como rascunho no navegador.
-
-O painel permite:
-
-- **Projetos** — adicionar por link do Vimeo/YouTube ou vídeo do computador, editar, excluir, ocultar, reordenar; criar categorias (filtros).
-- **Seções** — criar seções novas além do "Sobre", com texto, imagem, galeria e botão.
-- **Textos** — todos os textos do site, foto do "Sobre", números, ferramentas, serviços, clientes, contato e links.
-- **Visual** — cores (destaque, fundo, texto), textura, ligar/desligar partes do site.
-- **Mídia** — enviar e excluir arquivos.
-
-Nos textos longos, use `*itálico*` e `**negrito**`.
-
-## Rodar no seu computador
-
-Com Node 20+ instalado, na pasta do projeto (os dados ficam na pasta `data/`):
-
-```bash
-npm install
-```
-
-```bash
-ADMIN_USER=lucas ADMIN_PASSWORD=teste COOKIE_SECURE=false node server/server.js
-```
-
-Depois abra `http://localhost:3000` e `http://localhost:3000/admin/`.
+O Vercel Blob tem cota gratuita de armazenamento e transferência que depende do plano.
+Vídeos consomem transferência a cada visualização — acompanhe o uso em
+**Vercel → Storage → Blob** e confira os limites do seu plano.

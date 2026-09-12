@@ -21,11 +21,6 @@
 </head>
 <body>
 
-<!--
-  Os textos, projetos, imagens e cores vêm do arquivo content.json (editado pelo painel em /admin).
-  O texto escrito aqui no HTML é só o padrão, usado enquanto carrega ou se o content.json faltar.
--->
-
 <!-- ══ overlays de textura ══ -->
 <div class="fx-grain" aria-hidden="true"></div>
 <div class="fx-scan" aria-hidden="true"></div>
@@ -35,7 +30,7 @@
 <div class="loader" id="loader">
   <div class="loader__bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div class="loader__inner">
-    <div class="loader__label mono">CARREGANDO PROJETOS</div>
+    <div class="loader__label mono" data-k="hero.loaderLabel">CARREGANDO PROJETOS</div>
     <div class="loader__count" id="loaderCount">000</div>
     <div class="loader__track"><span id="loaderBar"></span></div>
   </div>
@@ -53,29 +48,20 @@
 <!-- ══ nav ══ -->
 <header class="nav" id="nav">
   <a href="#inicio" class="nav__logo" data-magnet>
-    <span class="nav__mark">LG</span>
-    <span class="nav__logotext mono">LUCAS GIRON</span>
+    <span class="nav__mark" data-k="brand.mark">LG</span>
+    <span class="nav__logotext mono" data-k="brand.name">LUCAS GIRON</span>
   </a>
-  <nav class="nav__menu">
-    <a href="#trabalhos" class="nav__link mono" data-scramble data-c="labels.navWorks">TRABALHOS</a>
-    <a href="#sobre"     class="nav__link mono" data-scramble data-c="labels.navAbout">SOBRE</a>
-    <a href="#contato"   class="nav__link mono" data-scramble data-c="labels.navContact">CONTATO</a>
-  </nav>
-  <button class="nav__reel mono" data-showreel data-video="535644122" data-title="Showreel 2024" data-magnet>
-    <span class="nav__reeldot"></span>SHOWREEL
+  <nav class="nav__menu" id="navMenu"></nav>
+  <button class="nav__reel mono" data-play="showreel" data-magnet>
+    <span class="nav__reeldot"></span><span data-k="nav.reel">SHOWREEL</span>
   </button>
   <button class="nav__burger" id="burger" aria-label="Abrir menu" aria-expanded="false"><i></i><i></i></button>
 </header>
 
 <!-- ══ menu mobile ══ -->
 <div class="drawer" id="drawer">
-  <a href="#trabalhos" class="drawer__link" data-c="labels.navWorks">Trabalhos</a>
-  <a href="#sobre"     class="drawer__link" data-c="labels.navAbout">Sobre</a>
-  <a href="#contato"   class="drawer__link" data-c="labels.navContact">Contato</a>
-  <div class="drawer__foot mono">
-    <a href="https://vimeo.com/gironlucas" target="_blank" rel="noopener" data-link="vimeo">VIMEO</a>
-    <a href="https://www.instagram.com/lucasgiron.aep/" target="_blank" rel="noopener" data-link="instagram">INSTAGRAM</a>
-  </div>
+  <div class="drawer__links" id="drawerLinks"></div>
+  <div class="drawer__foot mono" id="drawerFoot"></div>
 </div>
 
 <main>
@@ -92,81 +78,57 @@
   <div class="hero__glow" id="heroGlow" aria-hidden="true"></div>
 
   <div class="hero__inner">
-    <div class="hero__eyebrow mono">
-      <span class="dot"></span>
-      <span data-c="site.role">CREATIVE MOTION DIRECTOR</span>
-      <span class="sep">/</span>
-      <span data-c="site.city">FLORIANÓPOLIS — BR</span>
-    </div>
+    <div class="hero__eyebrow mono" id="heroEyebrow"></div>
 
     <h1 class="hero__title">
-      <span class="line" data-split>LUCAS</span>
-      <span class="line line--2" data-split>GIRON</span>
+      <span class="line" data-split data-k="hero.line1">LUCAS</span>
+      <span class="line line--2" data-split data-k="hero.line2">GIRON</span>
     </h1>
 
     <div class="hero__rotator" aria-hidden="true">
-      <span class="mono" data-c="labels.specialty">ESPECIALIDADE</span>
-      <div class="rot" id="rotator">
-        <span>ABERTURAS DE TV</span>
-        <span>VINHETAS</span>
-        <span>MOTION 2D</span>
-        <span>PACOTE GRÁFICO</span>
-        <span>EXPLAINERS</span>
-      </div>
+      <span class="mono" data-k="hero.rotatorLabel">ESPECIALIDADE</span>
+      <div class="rot" id="rotator"></div>
     </div>
 
     <div class="hero__grid">
-      <p class="hero__lede" data-c-rich="hero.lede">
-        Dez anos desenhando movimento para telas grandes e pequenas.
-        Do <em>opening</em> da NBA no Amazon Prime Video às vinhetas do
-        NBA Brasil — construo identidades que <strong>entram no ar</strong> e ficam na memória.
-      </p>
+      <p class="hero__lede" data-rich="hero.lede"></p>
       <div class="hero__actions">
-        <button class="btn btn--flare" data-showreel data-video="535644122" data-title="Showreel 2024" data-magnet>
+        <button class="btn btn--flare" data-play="showreel" data-magnet>
           <span class="btn__ico" aria-hidden="true">▶</span>
-          <span data-c="labels.showreel">VER SHOWREEL</span>
+          <span data-k="hero.ctaPrimary">VER SHOWREEL</span>
         </button>
-        <a class="btn btn--ghost" href="#trabalhos" data-magnet><span id="projCount">20 PROJETOS</span></a>
+        <a class="btn btn--ghost" href="#trabalhos" data-magnet><span id="ctaSecondary">PROJETOS</span></a>
       </div>
     </div>
   </div>
 
   <div class="hero__foot mono">
     <div class="hero__foot-l">
-      <span class="live"><i></i><span data-c="hero.availableText">DISPONÍVEL PARA PROJETOS</span></span>
+      <span class="live" id="heroStatus"><i></i><span data-k="hero.status">DISPONÍVEL PARA PROJETOS</span></span>
     </div>
-    <div class="hero__scroll"><span>ROLE</span><i></i></div>
+    <div class="hero__scroll"><span data-k="hero.scrollLabel">ROLE</span><i></i></div>
     <div class="hero__foot-r">
-      <span id="clock">--:--:--</span> <span class="muted">FLORIPA (BRT)</span>
+      <span id="clock">--:--:--</span> <span class="muted" data-k="hero.clockLabel">FLORIPA (BRT)</span>
     </div>
   </div>
 </section>
 
 <!-- ══════════ TICKER ══════════ -->
-<div class="ticker" aria-hidden="true" data-show="ticker">
-  <div class="ticker__track" id="ticker">
-    <span>MOTION DESIGN</span><i>◆</i><span>BROADCAST</span><i>◆</i><span>VINHETAS</span><i>◆</i>
-    <span>ABERTURAS</span><i>◆</i><span>ANIMAÇÃO 2D</span><i>◆</i><span>DIREÇÃO</span><i>◆</i>
-    <span>EXPLAINER</span><i>◆</i><span>PÓS-PRODUÇÃO</span><i>◆</i>
-  </div>
+<div class="ticker" id="faixa" aria-hidden="true" data-section="ticker">
+  <div class="ticker__track" id="ticker"></div>
 </div>
 
 <!-- ══════════ TRABALHOS ══════════ -->
-<section class="works" id="trabalhos">
+<section class="works" id="trabalhos" data-section="works">
   <div class="sec-head">
     <div class="sec-head__l">
-      <span class="sec-num mono" id="worksNum">01</span>
-      <h2 class="sec-title" data-scramble-in data-c="labels.works">TRABALHOS
+      <span class="sec-num mono" data-k="works.num">01</span>
+      <h2 class="sec-title" data-scramble-in data-k="works.title">TRABALHOS
 SELECIONADOS</h2>
     </div>
     <div class="sec-head__r">
-      <p class="mono muted" id="archiveLine">Arquivo 2020 — 2025. Clique para assistir.</p>
-      <div class="filters" id="filters">
-        <button class="filter is-on mono" data-filter="all">TODOS <sup></sup></button>
-        <button class="filter mono" data-filter="broadcast">BROADCAST <sup></sup></button>
-        <button class="filter mono" data-filter="motion">MOTION <sup></sup></button>
-        <button class="filter mono" data-filter="filme">FILME <sup></sup></button>
-      </div>
+      <p class="mono muted" data-k="works.subtitle">Arquivo 2020 — 2025. Clique para assistir.</p>
+      <div class="filters" id="filters"></div>
     </div>
   </div>
 
@@ -175,142 +137,57 @@ SELECIONADOS</h2>
 </section>
 
 <!-- ══════════ SOBRE ══════════ -->
-<section class="about" id="sobre" data-show="about">
+<section class="about" id="sobre" data-section="about">
   <div class="sec-head">
     <div class="sec-head__l">
-      <span class="sec-num mono" id="aboutNum">02</span>
-      <h2 class="sec-title" data-scramble-in data-c="labels.about">SOBRE</h2>
+      <span class="sec-num mono" data-k="about.num">02</span>
+      <h2 class="sec-title" data-scramble-in data-k="about.title">SOBRE</h2>
     </div>
   </div>
 
   <div class="about__body">
-    <div class="about__col about__col--text">
-      <p class="about__big" data-reveal data-c-rich="about.big">
-        Sou <strong>Lucas Giron</strong>, motion director em Florianópolis.
-        Trabalho na fronteira entre design gráfico e cinema: pego uma marca,
-        um conceito ou um jogo de basquete e transformo em <em>movimento</em>.
-      </p>
-      <div class="about__paras" id="aboutParas">
-        <p data-reveal>
-          Comecei em produtora, passei por direção e finalização de programas de TV
-          e hoje concentro o trabalho em pacotes gráficos completos — abertura, GCs,
-          transições, encerramento — para emissoras, agências e marcas.
-        </p>
-        <p data-reveal>
-          Já assinei aberturas para a <strong>NBA no Amazon Prime Video</strong> (com a Madruga Films),
-          vinhetas para o <strong>NBA Brasil</strong>, a identidade do programa <strong>Em Pauta</strong> da
-          Assembleia Legislativa de SC e animações 2D para a <strong>Rede Jesuíta de Educação</strong>.
-        </p>
-      </div>
-      <div class="about__sign" data-reveal aria-hidden="true" data-c="site.name">Lucas Giron</div>
-    </div>
+    <div class="about__col about__col--text" id="aboutText"></div>
 
     <div class="about__col about__col--side">
-      <!-- foto (enviada pelo painel → Textos → Sobre) -->
-      <figure class="about__photo" id="aboutPhoto" data-reveal hidden><img alt="" loading="lazy"></figure>
-
-      <div class="stats" id="stats">
-        <div class="stat" data-reveal>
-          <span class="stat__n" data-count="10" data-suffix="+">0</span>
-          <span class="stat__l mono">ANOS DE ESTRADA</span>
-        </div>
-        <div class="stat" data-reveal>
-          <span class="stat__n" data-count="20" data-suffix="">0</span>
-          <span class="stat__l mono">PROJETOS PUBLICADOS</span>
-        </div>
-        <div class="stat" data-reveal>
-          <span class="stat__n" data-count="3" data-suffix="">0</span>
-          <span class="stat__l mono">EMISSORAS / STREAMINGS</span>
-        </div>
-      </div>
-
-      <div class="kit" data-reveal>
-        <h3 class="kit__t mono" data-c="labels.tools">FERRAMENTAS</h3>
-        <ul class="kit__list" id="toolsList">
-          <li><span>After Effects</span><b>Motion / Composição</b></li>
-          <li><span>Cinema 4D</span><b>3D / Render</b></li>
-          <li><span>Premiere Pro</span><b>Edição</b></li>
-          <li><span>DaVinci Resolve</span><b>Cor / Finalização</b></li>
-          <li><span>Illustrator · Photoshop</span><b>Design</b></li>
-        </ul>
-      </div>
-
-      <div class="kit" data-reveal>
-        <h3 class="kit__t mono" data-c="labels.services">SERVIÇOS</h3>
-        <ul class="kit__list" id="servicesList">
-          <li><span>Pacote gráfico de TV</span><b>01</b></li>
-          <li><span>Abertura &amp; vinheta</span><b>02</b></li>
-          <li><span>Animação de logo</span><b>03</b></li>
-          <li><span>Vídeo explainer</span><b>04</b></li>
-          <li><span>Direção &amp; finalização</span><b>05</b></li>
-        </ul>
-      </div>
+      <div class="stats" id="stats"></div>
+      <div id="aboutLists"></div>
     </div>
   </div>
 </section>
 
-<!-- ══════════ SEÇÕES EXTRAS (criadas no painel → Seções) ══════════ -->
-<div id="customSections"></div>
-
 <!-- ══════════ CLIENTES ══════════ -->
-<section class="clients" data-show="clients">
-  <div class="clients__label mono" data-c="labels.clients">NO AR PARA</div>
+<section class="clients" id="clientes" data-section="clients">
+  <div class="clients__label mono" data-k="clients.label">NO AR PARA</div>
   <div class="marquee">
     <div class="marquee__track" id="clientTrack"></div>
   </div>
 </section>
 
 <!-- ══════════ CONTATO ══════════ -->
-<section class="contact" id="contato">
+<section class="contact" id="contato" data-section="contact">
   <div class="contact__bg" aria-hidden="true"></div>
-  <div class="sec-num mono" id="contactNum">03</div>
+  <div class="sec-num mono" data-k="contact.num">03</div>
 
-  <!-- HUD de transmissão -->
-  <div class="onair" aria-hidden="true" data-show="onair">
-    <span class="onair__lamp mono"><i></i>NO AR</span>
-    <span class="onair__tc mono" id="onairTc">00:00:00:00</span>
-    <span class="onair__ch mono" id="onairCh">CH 03 · CONTATO</span>
-    <span class="onair__meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-    <span class="onair__bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-  </div>
-
-  <p class="contact__kicker mono" data-reveal data-c="contact.kicker">TEM UM PROJETO PARA COLOCAR NO AR?</p>
+  <p class="contact__kicker mono" data-reveal data-k="contact.kicker">TEM UM PROJETO PARA COLOCAR NO AR?</p>
 
   <h2 class="contact__title">
-    <span class="line" data-split data-c="contact.title1">VAMOS</span>
-    <span class="line line--out" data-split data-c="contact.title2">ANIMAR</span>
+    <span class="line" data-split data-k="contact.line1">VAMOS</span>
+    <span class="line line--out" data-split data-k="contact.line2">ANIMAR</span>
   </h2>
 
   <div class="contact__row">
-    <!-- o e-mail é trocado pelo painel /admin (aba Textos → Contato) -->
-    <a class="contact__mail" href="mailto:email@exemplo.com" data-magnet data-scramble>email@exemplo.com</a>
-
-    <!-- selo giratório → abre o showreel -->
-    <button class="badge" data-showreel data-video="535644122" data-title="Showreel 2024" aria-label="Assistir showreel" data-magnet>
-      <svg class="badge__ring" viewBox="0 0 200 200" aria-hidden="true">
-        <defs><path id="badgePath" d="M100,100 m-80,0 a80,80 0 1,1 160,0 a80,80 0 1,1 -160,0"/></defs>
-        <text><textPath href="#badgePath" textLength="500" lengthAdjust="spacing">DISPONÍVEL PARA PROJETOS ✦ SHOWREEL 2024 ✦ </textPath></text>
-      </svg>
-      <span class="badge__play" aria-hidden="true">▶</span>
-    </button>
+    <a class="contact__mail" id="contactMail" href="#" data-magnet data-scramble></a>
   </div>
 
-  <div class="contact__links" id="contactLinks">
-    <a href="https://www.instagram.com/lucasgiron.aep/" target="_blank" rel="noopener" class="clink" data-magnet data-link="instagram">
-      <span class="clink__t">Instagram</span><span class="clink__h mono" data-handle="instagram">@lucasgiron.aep ↗</span>
-    </a>
-    <a href="https://vimeo.com/gironlucas" target="_blank" rel="noopener" class="clink" data-magnet data-link="vimeo">
-      <span class="clink__t">Vimeo</span><span class="clink__h mono" data-handle="vimeo">/gironlucas ↗</span>
-    </a>
-  </div>
+  <div class="contact__links" id="contactLinks"></div>
 </section>
 
 </main>
 
 <footer class="foot mono">
-  <span>© <span id="year">2026</span> <span data-c="site.name">LUCAS GIRON</span></span>
-  <span class="muted" data-c="site.footer">FLORIANÓPOLIS · SANTA CATARINA · BRASIL</span>
-  <a href="#inicio" class="foot__top">VOLTAR AO TOPO ↑</a>
+  <span>© <span id="year">2026</span> <span data-k="footer.name">LUCAS GIRON</span></span>
+  <span class="muted" data-k="footer.note">FLORIANÓPOLIS · SANTA CATARINA · BRASIL</span>
+  <a href="#inicio" class="foot__top" data-k="footer.backToTop">VOLTAR AO TOPO ↑</a>
 </footer>
 
 <!-- ══ lightbox ══ -->
@@ -322,6 +199,8 @@ SELECIONADOS</h2>
   </div>
 </div>
 
+<script src="assets/js/content.js"></script>
+<script src="assets/js/schema.js"></script>
 <script src="assets/js/main.js"></script>
 </body>
 </html>

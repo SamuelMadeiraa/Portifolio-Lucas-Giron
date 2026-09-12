@@ -1,39 +1,35 @@
-/* ═══════════════════════════════════════════════════════════
-   /api/upload — autoriza o envio de um arquivo do painel.
-   O arquivo vai do navegador direto para o Vercel Blob
-   (sem passar pelo limite de 4,5 MB das funções); esta rota só
-   confere o login e gera a permissão de envio.
-   ═══════════════════════════════════════════════════════════ */
 import { handleUpload } from '@vercel/blob/client';
-import { session } from './_lib/auth.js';
-import { mode } from './_lib/storage.js';
+import { isAuthed, json, unauthorized, MEDIA_DIR } from './_lib.js';
 
-const TYPES = [
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/svg+xml',
-  'video/mp4', 'video/webm', 'video/quicktime',
-  'application/pdf',
-];
+const MAX_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB por arquivo
 
-export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'private, no-store');
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido.' });
-  if (mode() !== 'blob') return res.status(400).json({ error: 'Vercel Blob não configurado (no servidor próprio o envio usa /api/upload-file).' });
+/* POST /api/upload
+   O navegador envia o arquivo direto para o Vercel Blob (sem passar pelo
+   limite de tamanho das funções). Aqui só autorizamos e geramos o token. */
+export async function POST(request) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'JSON inválido.' }, 400); }
+
+  // o aviso de "upload concluído" vem da própria Vercel, assinado — não tem cookie
+  if (body?.type === 'blob.generate-client-token' && !(await isAuthed(request))) return unauthorized();
+
   try {
     const result = await handleUpload({
-      body: req.body,
-      request: req,
+      body,
+      request,
       onBeforeGenerateToken: async pathname => {
-        if (!session(req)) throw new Error('Sua sessão expirou. Entre de novo.');
-        if (!pathname.startsWith('uploads/') || pathname.includes('..')) throw new Error('Caminho inválido.');
+        if (!(await isAuthed(request))) throw new Error('Não autorizado');
+        if (!pathname.startsWith(MEDIA_DIR)) throw new Error('Caminho inválido');
         return {
-          allowedContentTypes: TYPES,
-          maximumSizeInBytes: 500 * 1024 * 1024,
+          allowedContentTypes: ['video/*', 'image/*'],
+          maximumSizeInBytes: MAX_SIZE,
           addRandomSuffix: true,
         };
       },
+      onUploadCompleted: async () => {},
     });
-    return res.status(200).json(result);
-  } catch (e) {
-    return res.status(400).json({ error: e.message || 'Envio recusado.' });
+    return json(result);
+  } catch (err) {
+    return json({ error: err.message }, 400);
   }
 }

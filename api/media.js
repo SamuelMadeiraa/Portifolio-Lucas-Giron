@@ -1,26 +1,35 @@
-/* ═══════════════════════════════════════════════════════════
-   /api/media — arquivos enviados pelo painel (só com login)
-   GET              → lista os arquivos
-   DELETE ?url=…    → apaga um arquivo
-   ═══════════════════════════════════════════════════════════ */
-import { requireAdmin } from './_lib/auth.js';
-import { mode, listUploads, deleteUpload } from './_lib/storage.js';
+import { list, del } from '@vercel/blob';
+import { isAuthed, json, unauthorized, status, MEDIA_DIR } from './_lib.js';
 
-export default async function handler(req, res) {
-  if (!requireAdmin(req, res)) return;
-  if (!mode()) return res.status(200).json({ files: [], storage: false });
+// GET /api/media → todos os arquivos enviados pelo painel
+export async function GET(request) {
+  if (!(await isAuthed(request))) return unauthorized();
+  if (!status().blob) return json({ files: [] });
 
-  try {
-    if (req.method === 'GET') {
-      return res.status(200).json({ files: await listUploads(), storage: true });
-    }
-    if (req.method === 'DELETE') {
-      await deleteUpload(String((req.query && req.query.url) || ''));
-      return res.status(200).json({ ok: true });
-    }
-    res.setHeader('Allow', 'GET, DELETE');
-    return res.status(405).json({ error: 'Método não permitido.' });
-  } catch (e) {
-    return res.status(e.status || 500).json({ error: e.message || 'Falha no armazenamento.' });
-  }
+  const files = [];
+  let cursor;
+  do {
+    const page = await list({ prefix: MEDIA_DIR, limit: 1000, cursor });
+    page.blobs.forEach(b => files.push({ url: b.url, pathname: b.pathname, size: b.size, uploadedAt: b.uploadedAt }));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+
+  return json({ files });
+}
+
+// DELETE /api/media  { urls: [...] } → apaga arquivos (só dentro de media/)
+export async function DELETE(request) {
+  if (!(await isAuthed(request))) return unauthorized();
+
+  let body = {};
+  try { body = await request.json(); } catch {}
+  const urls = (Array.isArray(body.urls) ? body.urls : []).filter(u => {
+    try {
+      const url = new URL(u);
+      return url.hostname.endsWith('.blob.vercel-storage.com') && url.pathname.slice(1).startsWith(MEDIA_DIR);
+    } catch { return false; }
+  });
+
+  if (urls.length) await del(urls);
+  return json({ ok: true, deleted: urls.length });
 }

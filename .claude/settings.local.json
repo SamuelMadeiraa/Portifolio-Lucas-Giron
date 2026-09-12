@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:vimeo.com)",
+      "WebFetch(domain:www.instagram.com)"
+    ]
+  }
+}

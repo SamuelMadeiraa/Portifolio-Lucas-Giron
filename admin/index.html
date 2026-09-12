@@ -2,156 +2,68 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#08080A">
-<title>Admin — Portfólio</title>
+<title>Painel — Lucas Giron</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF3B00'/><text y='70' x='50' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='56' fill='%2308080A'>A</text></svg>">
+<link rel="stylesheet" href="/admin/admin.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF3B00'/><text y='70' x='50' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='52' fill='%23fff'>LG</text></svg>">
 </head>
 <body>
 
-<!-- ══════════ LOGIN ══════════ -->
-<section class="login" id="login" hidden>
-  <div class="login__card">
-    <div class="brand"><span class="brand__mark">LG</span><span class="mono">Painel admin</span></div>
-
-    <form id="loginForm">
-      <h1>Entrar</h1>
-      <p class="hint">Painel de edição do site.</p>
-      <label class="field"><span>Usuário</span>
-        <input class="in" id="loginUser" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-      </label>
-      <label class="field"><span>Senha</span>
-        <input class="in" type="password" id="loginPass" autocomplete="current-password" required>
-      </label>
-      <label class="check"><input type="checkbox" id="showPass"><i></i><span>Mostrar senha</span></label>
-      <button class="btn btn--primary" type="submit">Entrar</button>
-    </form>
-
-    <p class="err" id="loginErr" role="alert"></p>
-    <p class="hint" id="noApiNote" hidden>
-      O login só funciona com o site publicado na Vercel (ou rodando com <code>vercel dev</code>).
-      Aqui você pode testar o painel, mas nada é salvo no site.
-    </p>
-    <button class="link" type="button" id="localMode" hidden>Testar sem salvar (só baixa o content.json)</button>
-  </div>
-</section>
-
-<!-- ══════════ PAINEL ══════════ -->
-<div class="app" id="app" hidden>
-  <div class="localbar" id="localBar" hidden>Modo de teste: nada é salvo no site. “Baixar content.json” gera o arquivo com as alterações. Envio de fotos e vídeos só funciona na Vercel.</div>
-  <div class="localbar" id="storageBar" hidden>O armazenamento não está ligado: no painel da Vercel, abra o projeto → <b>Storage</b> → <b>Create → Blob</b> e conecte ao projeto. Depois faça um novo deploy.</div>
-  <header class="bar">
-    <div class="brand"><span class="brand__mark">LG</span><span class="mono" id="repoLabel">Painel</span></div>
-    <nav class="tabs" role="tablist">
-      <button class="tab is-on" data-tab="projetos" role="tab">Projetos</button>
-      <button class="tab" data-tab="secoes" role="tab">Seções</button>
-      <button class="tab" data-tab="textos" role="tab">Textos</button>
-      <button class="tab" data-tab="visual" role="tab">Visual</button>
-      <button class="tab" data-tab="midia" role="tab">Mídia</button>
-    </nav>
-    <div class="bar__right">
-      <span class="status mono" id="status"><i></i><span>Tudo publicado</span></span>
-      <button class="btn" id="previewBtn" title="Abre o site com as alterações, sem publicar">👁 <span>Pré-visualizar</span></button>
-      <button class="btn btn--primary" id="publishBtn">Publicar</button>
-      <button class="btn btn--ghost" id="logoutBtn" title="Sair">Sair</button>
+<!-- ══ login ══ -->
+<div class="login" id="login" hidden>
+  <form class="login__card" id="loginForm">
+    <div class="login__mark">LG</div>
+    <div>
+      <h1>Painel do site</h1>
+      <p class="muted">Entre com a senha de administrador.</p>
     </div>
-  </header>
+    <div class="notice" id="loginNotice" hidden></div>
+    <label class="f">
+      <span class="f__l">Senha</span>
+      <input type="password" id="loginPw" autocomplete="current-password" required>
+    </label>
+    <button class="b b--primary b--block" type="submit" id="loginBtn">Entrar</button>
+    <p class="login__err" id="loginErr" role="alert"></p>
+  </form>
+</div>
 
-  <main class="wrap">
+<!-- ══ app ══ -->
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="side__brand"><span class="side__mark">LG</span><span>Painel</span></div>
+    <nav class="side__nav" id="tabs"></nav>
+    <div class="side__foot">
+      <a class="b b--ghost b--sm" href="/" target="_blank" rel="noopener">Ver site ↗</a>
+      <button class="b b--ghost b--sm" type="button" id="logoutBtn">Sair</button>
+    </div>
+  </aside>
 
-    <!-- ══ PROJETOS ══ -->
-    <section class="panel" data-panel="projetos">
-      <div class="card">
-        <h2>Adicionar projeto</h2>
-        <p class="hint">Cole o link do vídeo no <b>Vimeo</b> ou no <b>YouTube</b> — título, duração e capa são puxados automaticamente.</p>
-        <form class="add" id="addForm">
-          <input class="in" id="addUrl" placeholder="https://vimeo.com/123456789" inputmode="url" required>
-          <button class="btn btn--primary" type="submit" id="addBtn">Adicionar</button>
-        </form>
-        <div class="or">ou envie um vídeo do computador</div>
-        <label class="drop" id="videoDrop">
-          <input type="file" accept="video/*">
-          <span class="drop__ico">⬆</span>
-          <span><b>Clique ou arraste um vídeo aqui</b></span>
-          <span class="hint">MP4 de preferência. A capa é gerada sozinha (dá pra trocar depois).</span>
-        </label>
+  <main class="main">
+    <header class="bar">
+      <div class="bar__l">
+        <h1 class="bar__t" id="tabTitle"></h1>
+        <p class="bar__s" id="tabHint"></p>
       </div>
-
-      <div class="card">
-        <div class="card__head">
-          <h2>Projetos <span class="count" id="projTotal">0</span></h2>
-          <p class="hint">Arraste pela alça <b>⠿</b> (ou use ↑ ↓) para mudar a ordem. Clique no projeto para editar.</p>
-        </div>
-        <div class="projs" id="projList"></div>
+      <div class="bar__actions">
+        <span class="dirty" id="dirty" hidden>● Alterações não publicadas</span>
+        <button class="b b--ghost" type="button" id="discardBtn" hidden>Descartar</button>
+        <button class="b b--ghost" type="button" id="previewBtn">Pré-visualizar</button>
+        <button class="b b--primary" type="button" id="publishBtn">Publicar</button>
       </div>
-
-      <div class="card">
-        <h2>Categorias</h2>
-        <p class="hint">Viram os filtros acima dos trabalhos. Categorias sem projeto não aparecem no site.</p>
-        <div class="list" id="catsList"></div>
-        <button class="btn btn--sm add-row" type="button" id="catAdd">+ Nova categoria</button>
-      </div>
-    </section>
-
-    <!-- ══ SEÇÕES EXTRAS ══ -->
-    <section class="panel" data-panel="secoes" hidden>
-      <div class="card">
-        <div class="card__head">
-          <div>
-            <h2>Seções extras</h2>
-            <p class="hint">Crie blocos novos além do “Sobre” — texto, foto, galeria e botão. Aparecem entre o Sobre e os clientes, na ordem abaixo.</p>
-          </div>
-          <button class="btn btn--primary" type="button" id="secAdd">+ Nova seção</button>
-        </div>
-        <div class="projs" id="secList"></div>
-      </div>
-    </section>
-
-    <!-- ══ TEXTOS ══ -->
-    <section class="panel" data-panel="textos" hidden>
-      <div id="textsPanel" class="stack"></div>
-    </section>
-
-    <!-- ══ VISUAL ══ -->
-    <section class="panel" data-panel="visual" hidden>
-      <div id="visualPanel" class="stack"></div>
-    </section>
-
-    <!-- ══ MÍDIA ══ -->
-    <section class="panel" data-panel="midia" hidden>
-      <div class="card">
-        <h2>Arquivos do site</h2>
-        <p class="hint">Fotos, imagens e vídeos enviados. Imagens grandes são otimizadas automaticamente antes de subir.</p>
-        <label class="drop" id="mediaDrop">
-          <input type="file" accept="image/*,video/*,application/pdf" multiple>
-          <span class="drop__ico">⬆</span>
-          <span><b>Clique ou arraste arquivos aqui</b></span>
-          <span class="hint">Depois é só escolher na “Biblioteca” de qualquer campo de imagem.</span>
-        </label>
-        <div class="media" id="mediaGrid"></div>
-        <p class="hint" id="mediaInfo"></p>
-      </div>
-    </section>
-
+    </header>
+    <div class="view" id="view"></div>
   </main>
 </div>
 
-<!-- ══ editor lateral ══ -->
-<div class="sheet" id="sheet" aria-hidden="true">
-  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-    <div class="sheet__head"><h2 id="sheetTitle"></h2><button class="icon-btn" type="button" id="sheetX" aria-label="Fechar">✕</button></div>
-    <div class="sheet__body" id="sheetBody"></div>
-    <div class="sheet__foot" id="sheetFoot"></div>
-  </div>
-</div>
+<dialog class="dlg" id="dlg"><div class="dlg__inner" id="dlgInner"></div></dialog>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<script src="admin.js"></script>
+<script src="/assets/js/content.js"></script>
+<script src="/assets/js/schema.js"></script>
+<script type="module" src="/admin/admin.js"></script>
 </body>
 </html>
