@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/page.js": {
+      "includeFiles": "{page.html,assets/js/content.js}"
+    }
+  },
   "rewrites": [
     { "source": "/", "destination": "/api/page" },
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
@@ -13,6 +18,10 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" }
       ]
+    },
+    {
+      "source": "/page.html",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }]
     },
     {
       "source": "/admin(.*)",

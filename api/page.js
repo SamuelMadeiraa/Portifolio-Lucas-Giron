@@ -1,10 +1,17 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { get } from '@vercel/blob';
 import { CONTENT_PATH, status } from './_lib.js';
-import { loadDefaults, renderPage } from './_seo.js';
+import { readDefaults, renderPage } from './_seo.js';
 
 /* GET / → devolve o HTML já preenchido com o conteúdo publicado.
    O navegador continua montando a página por cima (mesmo resultado),
-   mas o Google recebe tudo pronto, sem depender de JavaScript. */
+   mas o Google recebe tudo pronto, sem depender de JavaScript.
+
+   O molde é page.html (e não index.html) porque, na Vercel, um arquivo
+   estático em / teria prioridade sobre esta função. */
+const SHELL = path.join(process.cwd(), 'page.html');
+
 export async function GET(request) {
   const url = new URL(request.url);
   const host = request.headers.get('x-forwarded-host') || url.host;
@@ -12,14 +19,14 @@ export async function GET(request) {
   const origin = `${proto}://${host}`;
 
   const [shell, defaults, published] = await Promise.all([
-    fetch(`${origin}/index.html`).then(r => (r.ok ? r.text() : '')).catch(() => ''),
-    loadDefaults(origin),
+    readFile(SHELL, 'utf8').catch(() => ''),
+    readDefaults(),
     readContent(),
   ]);
 
   // sem o molde não há o que preencher: entrega o arquivo estático
   if (!shell) {
-    return new Response(null, { status: 302, headers: { location: '/index.html', 'cache-control': 'no-store' } });
+    return new Response(null, { status: 302, headers: { location: '/page.html', 'cache-control': 'no-store' } });
   }
 
   let html;

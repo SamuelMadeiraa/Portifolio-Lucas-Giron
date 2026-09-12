@@ -43,17 +43,17 @@ const ANCHORS = { ticker: 'faixa', works: 'trabalhos', about: 'sobre', clients: 
 
 /* O conteúdo padrão mora em assets/js/content.js — o mesmo arquivo que o
    navegador usa — para nunca existirem duas versões da verdade. */
-let defaultsCache = null;
-export async function loadDefaults(origin) {
-  if (defaultsCache) return defaultsCache;
+let defaultsCache;
+export async function readDefaults() {
+  if (defaultsCache !== undefined) return defaultsCache;
+  defaultsCache = null;
   try {
-    const r = await fetch(`${origin}/assets/js/content.js`, { cache: 'no-store' });
-    const src = r.ok ? await r.text() : '';
-    if (src) {
-      const win = {};
-      new Function('window', src + '; return window.SITE_DEFAULT;')(win);
-      defaultsCache = win.SITE_DEFAULT || null;
-    }
+    const { readFile } = await import('node:fs/promises');
+    const path = (await import('node:path')).default;
+    const src = await readFile(path.join(process.cwd(), 'assets', 'js', 'content.js'), 'utf8');
+    const win = {};
+    new Function('window', src + '; return window.SITE_DEFAULT;')(win);
+    defaultsCache = win.SITE_DEFAULT || null;
   } catch { defaultsCache = null; }
   return defaultsCache;
 }

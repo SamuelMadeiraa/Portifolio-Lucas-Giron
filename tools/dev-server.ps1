@@ -74,7 +74,12 @@ $Handler = {
     if (@($segs | Where-Object { $_.StartsWith('.') -and $_ -ne '.dev-data' }).Count) { return Send-Json 404 @{ error = 'not found' } }
     $file = [IO.Path]::GetFullPath((Join-Path $Cfg.Root ($segs -join '\')))
     if (-not $file.StartsWith($Cfg.Root)) { return Send-Json 404 @{ error = 'not found' } }
-    if (Test-Path $file -PathType Container) { $file = Join-Path $file 'index.html' }
+    if (Test-Path $file -PathType Container) {
+      $idx = Join-Path $file 'index.html'
+      # na Vercel a home é montada pela função /api/page a partir de page.html
+      if (-not (Test-Path $idx -PathType Leaf)) { $idx = Join-Path $file 'page.html' }
+      $file = $idx
+    }
     if (-not (Test-Path $file -PathType Leaf)) { return Send-Json 404 @{ error = 'not found' } }
 
     $type = $Types[[IO.Path]::GetExtension($file).ToLower()]
