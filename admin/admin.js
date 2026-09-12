@@ -95,6 +95,7 @@ function normalize(d) {
   });
   d.nav.items ||= [];
   d.typography = { ...DEFAULT.typography, ...(d.typography || {}) };
+  d.person = { ...DEFAULT.person, ...(d.person || {}) };
   delete d.sections;
   return d;
 }
@@ -1160,9 +1161,19 @@ function viewGeneral() {
       field(d.works, 'title', { label: 'Título', rows: 2, hint: 'Pule linha para quebrar o título.' }),
       field(d.works, 'subtitle', { label: 'Subtítulo' })),
     box('Google e compartilhamento', 'Como o site aparece nos resultados de busca e quando o link é enviado no WhatsApp, Instagram etc.',
-      field(d.seo, 'title', { label: 'Título da página' }),
-      field(d.seo, 'description', { label: 'Descrição', rows: 3, hint: 'Ideal: até 160 caracteres.' }),
-      imageEditor(d.seo, 'ogImage', { label: 'Imagem de compartilhamento (1200 × 630)', name: 'compartilhamento' })));
+      field(d.seo, 'title', { label: 'Título da página', hint: 'Até ~60 caracteres. Comece pelo nome e diga o que você faz.' }),
+      field(d.seo, 'description', { label: 'Descrição', rows: 3, hint: 'Até ~155 caracteres. É o texto que aparece embaixo do título no Google.' }),
+      field(d.seo, 'siteUrl', { label: 'Endereço oficial do site', placeholder: 'https://lucasgiron.com.br', hint: 'Evita que o Google trate os endereços alternativos como sites diferentes.' }),
+      imageEditor(d.seo, 'ogImage', { label: 'Imagem de compartilhamento (1200 × 630)', name: 'compartilhamento' })),
+    box('Quem é (para o Google)', 'Vira ficha de identificação do site (schema.org). É o que ajuda a aparecer como resultado certo quando alguém busca pelo nome.',
+      grid(
+        field(d.person, 'name', { label: 'Nome' }),
+        field(d.person, 'jobTitle', { label: 'Profissão', placeholder: 'Motion Designer e Animador Gráfico' })),
+      grid(
+        field(d.person, 'city', { label: 'Cidade' }),
+        field(d.person, 'state', { label: 'Estado (sigla)', placeholder: 'SC' }),
+        field(d.person, 'country', { label: 'País (sigla)', placeholder: 'BR' })),
+      tip('As redes sociais da aba ', h('strong', {}, 'Contato & rodapé'), ' entram automaticamente aqui, confirmando ao Google que os perfis e o site são da mesma pessoa.')));
 }
 
 /* ── Senha ── */

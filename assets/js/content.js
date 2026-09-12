@@ -36,9 +36,20 @@ window.SITE_DEFAULT = {
   ],
 
   seo: {
-    title: 'Lucas Giron — Creative Motion Director',
-    description: 'Lucas Giron — Creative Motion Director em Florianópolis. Motion design, vinhetas, aberturas e pacotes gráficos para broadcast. NBA Brasil, Amazon Prime Video, ALESC, Rede Jesuíta.',
+    title: 'Lucas Giron — Motion Designer e Animador Gráfico em Florianópolis',
+    description: 'Motion designer e animador gráfico em Florianópolis. Aberturas, vinhetas e pacotes gráficos para TV e streaming — NBA Brasil, Amazon Prime Video, ALESC.',
     ogImage: 'assets/thumbs/764150238.jpg',
+    siteUrl: 'https://lucasgiron.com.br',
+  },
+
+  /* Usado nos dados estruturados (schema.org) que o Google lê para
+     identificar de quem é o site. */
+  person: {
+    name: 'Lucas Giron',
+    jobTitle: 'Motion Designer e Animador Gráfico',
+    city: 'Florianópolis',
+    state: 'SC',
+    country: 'BR',
   },
 
   brand: { mark: 'LG', name: 'LUCAS GIRON' },

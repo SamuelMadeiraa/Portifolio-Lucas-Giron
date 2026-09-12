@@ -111,12 +111,12 @@ function finish(){
   const tick = () => {
     if (finished) return;
     // segura em 90% até o conteúdo chegar
-    n = contentDone ? n + Math.random() * 9 + 2 : Math.min(n + Math.random() * 6 + 1, 90);
+    n = contentDone ? n + Math.random() * 16 + 8 : Math.min(n + Math.random() * 9 + 3, 90);
     if (n >= 100) n = 100;
     countEl.textContent = String(Math.floor(n)).padStart(3, '0');
     barEl.style.width = n + '%';
-    if (n < 100) setTimeout(tick, 60 + Math.random() * 90);
-    else setTimeout(finish, 350);
+    if (n < 100) setTimeout(tick, 35 + Math.random() * 55);
+    else setTimeout(finish, 220);
   };
   setTimeout(tick, 200);
 })();
@@ -258,6 +258,7 @@ function applyContent(){
 
   /* ordem das seções + seções criadas no painel */
   const main = $('main');
+  $$('[data-ssr]').forEach(el => el.remove());   // tira o que veio pronto do servidor
   const builtin = {};
   $$('[data-section]').forEach(el => builtin[el.dataset.section] = el);
   const used = new Set();
@@ -449,7 +450,7 @@ function renderGrid(projects){
          data-play="${esc(p.id)}" ${p.video ? `data-preview="${esc(safeUrl(p.video))}"` : ''}
          aria-label="Assistir ${esc(p.title)}">
         <div class="card__media">
-          ${p.poster ? `<img class="card__img" src="${esc(safeUrl(p.poster))}" alt="${esc(p.title)}" loading="${i < 3 ? 'eager' : 'lazy'}" decoding="async">` : ''}
+          ${p.poster ? `<img class="card__img" src="${esc(safeUrl(p.poster))}" alt="${esc(p.title)}" width="1280" height="720" loading="${i < 3 ? 'eager' : 'lazy'}" decoding="async">` : ''}
           <span class="card__glitch"></span>
           <span class="card__scan"></span>
           ${p.tag ? `<span class="card__tag">${esc(p.tag)}</span>` : ''}
