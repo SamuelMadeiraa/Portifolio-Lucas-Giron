@@ -1613,10 +1613,38 @@
   const onColor = hex => { const lum = lumOf(hex); return (lum + .05) / .0524 >= .91 / (lum + .05) ? '#08080A' : '#F2EFE9'; };
   const contrast = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
 
-  function applyAdminTheme() {
-    const a = S.content.theme.accent || '#FF3B00';
-    document.documentElement.style.setProperty('--accent', a);
-    document.documentElement.style.setProperty('--on-accent', onColor(a));
+  // o painel usa as mesmas cores do site (destaque, fundo e texto)
+  const okHex = h => /^#[0-9a-f]{6}$/i.test(h || '');
+  function applyAdminTheme(theme = S.content && S.content.theme) {
+    if (!theme) return;
+    const a = okHex(theme.accent) ? theme.accent : '#FF3B00';
+    const bg = okHex(theme.bg) ? theme.bg : '#08080A';
+    const fg = okHex(theme.fg) ? theme.fg : '#F2EFE9';
+    const rgb = hex => { const n = parseInt(hex.slice(1), 16); return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`; };
+    const mix = (pct, c1, c2) => `color-mix(in srgb, ${c1} ${pct}%, ${c2})`;
+    const vars = {
+      '--accent': a,
+      '--on-accent': onColor(a),
+      '--bg': bg,
+      '--bg-rgb': rgb(bg),
+      '--bg2': mix(94, bg, fg),
+      '--bg3': mix(89, bg, fg),
+      '--fg': fg,
+      '--fg2': mix(76, fg, bg),
+      '--mute': mix(52, fg, bg),
+      '--line': `rgba(${rgb(fg)}, .12)`,
+      '--line2': `rgba(${rgb(fg)}, .22)`,
+    };
+    const root = document.documentElement;
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    const light = lumOf(bg) > .5;
+    root.style.colorScheme = light ? 'light' : 'dark';
+    // avisos legíveis também em fundo claro
+    root.style.setProperty('--warn', light ? '#B45309' : '#FFB020');
+    root.style.setProperty('--ok', light ? '#15803D' : '#3DDC84');
+    const meta = $('meta[name="theme-color"]');
+    if (meta) meta.content = bg;
+    try { localStorage.setItem('lg-admin-theme', JSON.stringify({ accent: a, bg, fg })); } catch (e) { /* ok */ }
   }
   function updateSample() {
     const T = S.content.theme;
@@ -1812,5 +1840,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && S.content) { e.preventDefault(); publish(); }
   });
 
+  // login já abre com as últimas cores usadas no site
+  try { applyAdminTheme(JSON.parse(localStorage.getItem('lg-admin-theme'))); } catch (e) { /* sem cores salvas */ }
   boot();
 })();
