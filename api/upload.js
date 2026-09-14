@@ -21,7 +21,7 @@ export async function POST(request) {
         if (!(await isAuthed(request))) throw new Error('Não autorizado');
         if (!pathname.startsWith(MEDIA_DIR)) throw new Error('Caminho inválido');
         return {
-          allowedContentTypes: ['video/*', 'image/*'],
+          allowedContentTypes: ['video/*', 'image/*', 'application/pdf', 'model/gltf-binary', 'model/gltf+json'],
           maximumSizeInBytes: MAX_SIZE,
           addRandomSuffix: true,
         };

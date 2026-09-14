@@ -36,6 +36,7 @@ $Handler = {
     '.json'='application/json; charset=utf-8'; '.svg'='image/svg+xml'; '.ico'='image/x-icon'
     '.jpg'='image/jpeg'; '.jpeg'='image/jpeg'; '.png'='image/png'; '.webp'='image/webp'; '.gif'='image/gif'; '.avif'='image/avif'
     '.mp4'='video/mp4'; '.m4v'='video/mp4'; '.webm'='video/webm'; '.mov'='video/quicktime'
+    '.pdf'='application/pdf'; '.glb'='model/gltf-binary'; '.gltf'='model/gltf+json'
   }
 
   function Send-Bytes([int]$status, [byte[]]$bytes, [string]$type, $headers) {

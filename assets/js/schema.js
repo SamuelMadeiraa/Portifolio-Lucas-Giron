@@ -34,7 +34,7 @@ const FONTS = {
 };
 
 // id no HTML de cada seção fixa (usado pelos links do menu)
-const ANCHORS = { ticker: 'faixa', works: 'trabalhos', about: 'sobre', clients: 'clientes', contact: 'contato' };
+const ANCHORS = { ticker: 'faixa', works: 'trabalhos', design: 'design', about: 'sobre', clients: 'clientes', contact: 'contato' };
 
 const slug = s => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -50,7 +50,11 @@ function migrate(c) {
   }
   // as seções fixas sempre existem (podem ser ocultadas, não excluídas)
   (D.layout || []).forEach(b => {
-    if (!c.layout.some(x => x && x.type === b.type)) c.layout.push({ ...b });
+    if (c.layout.some(x => x && x.type === b.type)) return;
+    // seção nova "Design & 3D" entra logo depois dos trabalhos
+    const wi = b.type === 'design' ? c.layout.findIndex(x => x && x.type === 'works') : -1;
+    if (wi >= 0) c.layout.splice(wi + 1, 0, { ...b });
+    else c.layout.push({ ...b });
   });
   delete c.sections;
 

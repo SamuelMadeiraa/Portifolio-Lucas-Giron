@@ -25,11 +25,12 @@ window.SITE_DEFAULT = {
   typography: { display: 'Archivo', mono: 'IBM Plex Mono' },
 
   /* Ordem das seções abaixo do topo.
-     Fixas: ticker, works, about, clients, contact (podem ser ocultadas).
+     Fixas: ticker, works, design, about, clients, contact (podem ser ocultadas).
      Criadas pelo painel: text, gallery, video, cards, cta, band. */
   layout: [
     { id: 'ticker',  type: 'ticker',  hidden: false },
     { id: 'works',   type: 'works',   hidden: false },
+    { id: 'design',  type: 'design',  hidden: false },
     { id: 'about',   type: 'about',   hidden: false },
     { id: 'clients', type: 'clients', hidden: false },
     { id: 'contact', type: 'contact', hidden: false },
@@ -97,8 +98,10 @@ window.SITE_DEFAULT = {
     { id: 'filme',     label: 'FILME' },
   ],
 
-  /* vimeo = número final da URL do Vimeo  ·  video = arquivo enviado pelo painel
-     Se os dois existirem, o arquivo enviado tem prioridade. */
+  /* vimeo = número final da URL do Vimeo  ·  youtube = código do vídeo no YouTube
+     video = arquivo enviado pelo painel (tem prioridade sobre os links).
+     blocks = página do projeto, um bloco embaixo do outro:
+       video · compare (antes e depois) · gallery · image · text · model (3D) · pdf · link */
   projects: [
     { id:'764150238', title:'NBA — Amazon Prime Video', year:2022, duration:18, category:'broadcast', tag:'Abertura',
       description:'Sequência de abertura das transmissões da NBA no Amazon Prime. Produzido com a Madruga Films.',
@@ -162,6 +165,21 @@ window.SITE_DEFAULT = {
       vimeo:'417767531', video:'', poster:'assets/thumbs/417767531.jpg', hidden:false },
   ],
 
+  /* Seção "Design & 3D": trabalhos que não são vídeo (identidade visual,
+     fotos, antes e depois, modelos 3D, PDFs). Some sozinha se estiver vazia. */
+  design: {
+    num: '',
+    title: 'DESIGN\n& 3D',
+    subtitle: 'Identidade visual, fotografia e 3D. Clique para ver.',
+    allLabel: 'TODOS',
+  },
+  designCategories: [
+    { id: 'design', label: 'DESIGN GRÁFICO' },
+    { id: 'foto',   label: 'FOTOGRAFIA' },
+    { id: '3d',     label: '3D' },
+  ],
+  designs: [],
+
   about: {
     num: '02',
     title: 'SOBRE',
@@ -216,5 +234,6 @@ window.SITE_DEFAULT = {
     name: 'LUCAS GIRON',
     note: 'FLORIANÓPOLIS · SANTA CATARINA · BRASIL',
     backToTop: 'VOLTAR AO TOPO ↑',
+    social: true,   // redes do contato no rodapé, com ícone
   },
 };

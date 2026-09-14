@@ -136,6 +136,23 @@ SELECIONADOS</h2>
   <noscript><p class="mono muted" style="padding:0 var(--pad)">Ative o JavaScript para ver o portfólio completo, ou acesse <a href="https://vimeo.com/gironlucas">vimeo.com/gironlucas</a>.</p></noscript>
 </section>
 
+<!-- ══════════ DESIGN & 3D ══════════ -->
+<section class="works works--design" id="design" data-section="design">
+  <div class="sec-head">
+    <div class="sec-head__l">
+      <span class="sec-num mono" data-k="design.num"></span>
+      <h2 class="sec-title" data-scramble-in data-k="design.title">DESIGN
+&amp; 3D</h2>
+    </div>
+    <div class="sec-head__r">
+      <p class="mono muted" data-k="design.subtitle">Identidade visual, fotografia e 3D. Clique para ver.</p>
+      <div class="filters" id="designFilters"></div>
+    </div>
+  </div>
+
+  <div class="grid" id="designGrid"></div>
+</section>
+
 <!-- ══════════ SOBRE ══════════ -->
 <section class="about" id="sobre" data-section="about">
   <div class="sec-head">
@@ -186,9 +203,16 @@ SELECIONADOS</h2>
 
 <footer class="foot mono">
   <span>© <span id="year">2026</span> <span data-k="footer.name">LUCAS GIRON</span></span>
+  <nav class="foot__social" id="footSocial" aria-label="Redes sociais" hidden></nav>
   <span class="muted" data-k="footer.note">FLORIANÓPOLIS · SANTA CATARINA · BRASIL</span>
   <a href="#inicio" class="foot__top" data-k="footer.backToTop">VOLTAR AO TOPO ↑</a>
 </footer>
+
+<!-- ══ página do projeto (blocos: vídeo, antes e depois, galeria, 3D…) ══ -->
+<div class="case" id="case" role="dialog" aria-modal="true" aria-label="Projeto">
+  <button class="modal__close case__close" id="caseClose" aria-label="Fechar"><span></span><span></span></button>
+  <div class="case__inner" id="caseInner"></div>
+</div>
 
 <!-- ══ lightbox ══ -->
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Player de vídeo">

@@ -13,6 +13,9 @@ const BLOB_CLIENT = [
   'https://esm.sh/@vercel/blob@2.8.0/client?bundle',
   'https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/client/+esm',
 ];
+const MODEL_VIEWER = 'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js';
+// o Windows costuma mandar .glb/.pdf sem tipo
+const MIME_BY_EXT = { '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime' };
 
 /* ─────────────────────────────────────────────
    HELPERS
@@ -38,6 +41,42 @@ const fmtDur = s => { s = Math.max(0, Math.round(+s || 0)); return `${String(Mat
 const fmtDate = d => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(d));
 const abs = u => !u ? '' : /^(https?:|data:|blob:|\/)/.test(u) ? u : '/' + u;
 const isImg = p => /\.(jpe?g|png|webp|gif|avif|svg)$/i.test(p);
+const isVid = p => /\.(mp4|m4v|webm|mov|ogv)$/i.test(p);
+const ytId = s => {
+  const v = String(s || '').trim();
+  const m = v.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([\w-]{11})/);
+  return m ? m[1] : /^[\w-]{11}$/.test(v) ? v : '';
+};
+const ytThumb = id => id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '';
+const hasVideo = x => !!(x && (x.video || x.vimeo || ytId(x.youtube)));
+
+/* ── cores do painel = cores do site ── */
+function applyAdminTheme(t) {
+  const ok = v => /^#[0-9a-f]{6}$/i.test(v || '');
+  if (!t || !ok(t.ink) || !ok(t.paper) || !ok(t.flare)) return;
+  const nums = hex => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+  const rgb = hex => nums(hex).join(',');
+  const lum = hex => {
+    const [r, g, b] = nums(hex).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+    return .2126 * r + .7152 * g + .0722 * b;
+  };
+  const mix = (p, a, b) => `color-mix(in srgb, ${a} ${p}%, ${b})`;
+  const light = lum(t.ink) > .5;
+  const vars = {
+    '--bg': t.ink, '--bg-rgb': rgb(t.ink),
+    '--panel': mix(95, t.ink, t.paper), '--panel-2': mix(91, t.ink, t.paper), '--panel-3': mix(86, t.ink, t.paper),
+    '--txt': t.paper, '--line': `rgba(${rgb(t.paper)},.09)`, '--line-2': `rgba(${rgb(t.paper)},.18)`,
+    '--mut': `rgba(${rgb(t.paper)},.6)`, '--mut-2': `rgba(${rgb(t.paper)},.42)`,
+    '--acc': t.flare, '--acc-rgb': rgb(t.flare), '--acc-2': ok(t.flareSoft) ? t.flareSoft : t.flare,
+    '--on-acc': ok(t.onFlare) ? t.onFlare : '#FFFFFF',
+    '--ok': light ? '#15803D' : '#4ADE80', '--warn': light ? '#B45309' : '#FBBF24', '--err': light ? '#DC2626' : '#F87171',
+  };
+  const root = document.documentElement.style;
+  Object.entries(vars).forEach(([k, v]) => root.setProperty(k, v));
+  root.colorScheme = light ? 'light' : 'dark';
+  try { localStorage.setItem('giron:admin-theme', JSON.stringify(t)); } catch {}
+}
+try { applyAdminTheme(JSON.parse(localStorage.getItem('giron:admin-theme') || 'null')); } catch {}
 
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -78,11 +117,18 @@ const RICH_HINT = tip('Formatação: ', h('code', {}, '**negrito**'), ' e ', h('
 const S = { env: null, warns: [], saved: null, draft: null, tab: 'projects', dirty: false, uploading: 0 };
 
 function normalize(d) {
-  d.projects = (d.projects || []).map(p => ({
-    id: uid(), title: '', year: '', duration: 0, category: '', tag: '', description: '',
-    vimeo: '', video: '', poster: '', hidden: false, ...p,
-  }));
-  for (const k of ['categories', 'ticker']) if (!Array.isArray(d[k])) d[k] = [];
+  const item = p => {
+    const x = {
+      id: uid(), title: '', year: '', duration: 0, category: '', tag: '', description: '',
+      vimeo: '', youtube: '', video: '', poster: '', hidden: false, ...p,
+    };
+    x.blocks = (Array.isArray(x.blocks) ? x.blocks : []).filter(b => b && BLOCK_TYPES[b.type]);
+    x.blocks.forEach(b => { if (b.type === 'gallery') b.images ||= []; });
+    return x;
+  };
+  d.projects = (d.projects || []).map(item);
+  d.designs = (Array.isArray(d.designs) ? d.designs : []).map(item);
+  for (const k of ['categories', 'ticker', 'designCategories']) if (!Array.isArray(d[k])) d[k] = [];
   d.hero.eyebrow ||= []; d.hero.rotator ||= [];
   d.about.paragraphs ||= []; d.about.stats ||= []; d.about.lists ||= [];
   d.about.lists.forEach(l => l.items ||= []);
@@ -106,6 +152,8 @@ function touch() {
   cancelAnimationFrame(dirtyRaf);
   dirtyRaf = requestAnimationFrame(() => {
     S.dirty = JSON.stringify(S.draft) !== JSON.stringify(S.saved);
+    applyAdminTheme(S.draft?.theme);
+    if ($('#dlg').open) S.refreshBlocks?.();
     $('#dirty').hidden = !S.dirty;
     $('#discardBtn').hidden = !S.dirty;
     $('#publishBtn').classList.toggle('is-pulse', S.dirty);
@@ -148,6 +196,7 @@ async function loadBlobClient() {
 /* Envia um arquivo e devolve a URL pública */
 async function uploadFile(file, folder, onProgress = () => {}) {
   const ext = (file.name.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+  if (!file.type && MIME_BY_EXT[ext]) file = new File([file], file.name, { type: MIME_BY_EXT[ext] });
   const pathname = `media/${folder}/${slugify(file.name.replace(/\.[^.]+$/, '')) || 'arquivo'}${ext}`;
   S.uploading++;
   try {
@@ -380,11 +429,11 @@ function imageEditor(obj, key, { label = 'Imagem', name: nameOpt = 'imagem', vid
   return wrap;
 }
 
-/* vídeo: arquivo próprio ou Vimeo, + capa */
+/* vídeo: arquivo próprio, YouTube ou Vimeo, + capa */
 function mediaEditor(obj, { name: nameOpt = 'video', onMedia } = {}) {
   const wrap = h('div', { class: 'media' });
   const name = () => (typeof nameOpt === 'function' ? nameOpt() : nameOpt) || 'video';
-  let mode = obj.video || !obj.vimeo ? 'file' : 'vimeo';
+  let mode = obj.video ? 'file' : ytId(obj.youtube) ? 'youtube' : obj.vimeo ? 'vimeo' : 'file';
 
   const sendVideo = async (file, prog) => {
     if (!file.type.startsWith('video/')) return toast('Escolha um arquivo de vídeo.', 'warn');
@@ -417,6 +466,7 @@ function mediaEditor(obj, { name: nameOpt = 'video', onMedia } = {}) {
     const prog = progressBar();
     const seg = h('div', { class: 'seg' },
       h('button', { type: 'button', class: mode === 'file' ? 'is-on' : '', onclick: () => { mode = 'file'; draw(); } }, 'Arquivo de vídeo'),
+      h('button', { type: 'button', class: mode === 'youtube' ? 'is-on' : '', onclick: () => { mode = 'youtube'; draw(); } }, 'Link do YouTube'),
       h('button', { type: 'button', class: mode === 'vimeo' ? 'is-on' : '', onclick: () => { mode = 'vimeo'; draw(); } }, 'Link do Vimeo'));
 
     let body;
@@ -439,11 +489,26 @@ function mediaEditor(obj, { name: nameOpt = 'video', onMedia } = {}) {
           input),
         prog.el,
         h('small', { class: 'f__h' }, 'MP4 (H.264) toca em todos os navegadores. O vídeo toca direto no site, sem Vimeo. Ao enviar, a duração e a capa são preenchidas sozinhas.'));
+    } else if (mode === 'youtube') {
+      body = h('div', { class: 'media__body' },
+        field(obj, 'youtube', {
+          label: 'Link do vídeo no YouTube', placeholder: 'https://youtu.be/… ou https://www.youtube.com/watch?v=…',
+          onChange: v => {
+            const id = ytId(v);
+            if (!id) return;
+            obj.youtube = id;
+            obj.vimeo = '';
+            if (!obj.poster || obj.posterAuto) { obj.poster = ytThumb(id); obj.posterAuto = true; }
+            touch(); onMedia?.(); draw();
+          },
+        }),
+        h('small', { class: 'f__h' }, 'Aceita vídeo normal, Shorts e live. A capa do YouTube entra sozinha (dá para trocar abaixo).'),
+        obj.video && h('small', { class: 'f__h' }, 'Atenção: existe um arquivo enviado — ele tem prioridade sobre o YouTube.'));
     } else {
       body = h('div', { class: 'media__body' },
         field(obj, 'vimeo', {
           label: 'Link ou número do vídeo no Vimeo', placeholder: 'https://vimeo.com/123456789',
-          onChange: v => { const m = String(v).match(/(\d{6,})/); if (m) obj.vimeo = m[1]; },
+          onChange: v => { const m = String(v).match(/(\d{6,})/); if (m) { obj.vimeo = m[1]; obj.youtube = ''; } },
         }),
         obj.video && h('small', { class: 'f__h' }, 'Atenção: existe um arquivo enviado — ele tem prioridade sobre o Vimeo.'));
     }
@@ -459,7 +524,8 @@ function mediaEditor(obj, { name: nameOpt = 'video', onMedia } = {}) {
    ABAS
    ───────────────────────────────────────────── */
 const TABS = [
-  { id: 'projects', icon: '▦', label: 'Projetos',              hint: 'Adicione, edite, reordene, oculte ou exclua trabalhos.', render: viewProjects },
+  { id: 'projects', icon: '▦', label: 'Projetos',              hint: 'Adicione, edite, reordene, oculte ou exclua trabalhos. Cada projeto pode ter uma página com vídeos, antes e depois, galerias, 3D…', render: viewProjects },
+  { id: 'designs',  icon: '◈', label: 'Design & 3D',           hint: 'Trabalhos que não são vídeo: identidade visual, fotos, antes e depois, modelos 3D e PDFs.', render: viewDesigns },
   { id: 'categories', icon: '#', label: 'Categorias',          hint: 'Os filtros dos projetos: crie, renomeie, reordene e exclua.', render: viewCategories },
   { id: 'sections', icon: '☰', label: 'Seções & menu',         hint: 'Ordem das seções, seções novas e os links do menu.', render: viewSections },
   { id: 'hero',     icon: '◆', label: 'Início',                hint: 'Topo do site: nome, apresentação e chamadas.', render: viewHero },
@@ -496,65 +562,94 @@ function renderView() {
   $('#view').replaceChildren(tab.render());
 }
 
-/* ── Projetos ── */
-function viewProjects() {
+/* ── Projetos e Design & 3D (mesma lista, conteúdos diferentes) ── */
+const KINDS = {
+  projects: { cats: 'categories',       noun: 'projeto',  Noun: 'Projeto',  nouns: 'projetos' },
+  designs:  { cats: 'designCategories', noun: 'trabalho', Noun: 'Trabalho', nouns: 'trabalhos' },
+};
+S.redraw = {};
+
+/* capa para a lista: a enviada, a do YouTube ou a primeira imagem dos blocos */
+function thumbOf(p) {
+  if (p.poster) return p.poster;
+  if (ytId(p.youtube)) return ytThumb(ytId(p.youtube));
+  for (const b of p.blocks || []) {
+    const s = b.type === 'image' ? b.src
+      : b.type === 'gallery' ? (b.images || []).find(x => x && x.src)?.src
+      : b.type === 'compare' ? b.after
+      : b.type === 'video' ? (b.poster || ytThumb(ytId(b.youtube)))
+      : b.type === 'model' ? b.poster : '';
+    if (s) return s;
+  }
+  return '';
+}
+
+function viewProjects() { return viewItems('projects'); }
+
+function viewItems(kind) {
+  const K = KINDS[kind];
   const d = S.draft;
-  const catLabel = id => d.categories.find(c => c.id === id)?.label || 'sem categoria';
+  const items = d[kind];
+  const catLabel = id => d[K.cats].find(c => c.id === id)?.label || 'sem categoria';
   const list = h('div', { class: 'plist' });
   const summary = h('span', { class: 'muted' });
   let dragFrom = null;
 
   const move = (from, to) => {
-    if (to < 0 || to >= d.projects.length || from === to) return;
-    const [p] = d.projects.splice(from, 1);
-    d.projects.splice(to, 0, p);
+    if (to < 0 || to >= items.length || from === to) return;
+    const [p] = items.splice(from, 1);
+    items.splice(to, 0, p);
     touch(); draw();
   };
 
-  // projetos do conteúdo original que não estão mais na lista
-  const missing = () => (DEFAULT.projects || []).filter(o => !d.projects.some(p => p.id === o.id));
+  // itens do conteúdo original que não estão mais na lista
+  const missing = () => (DEFAULT[kind] || []).filter(o => !items.some(p => p.id === o.id));
   const restoreOriginals = () => {
     const miss = missing();
     if (!miss.length) return;
-    if (!confirm(`Trazer de volta ${miss.length} projeto(s) original(is)?\n\nOs projetos que estão na lista agora continuam como estão.`)) return;
-    d.projects.push(...clone(miss));
+    if (!confirm(`Trazer de volta ${miss.length} ${K.noun}(s) original(is)?\n\nOs que estão na lista agora continuam como estão.`)) return;
+    items.push(...clone(miss));
     const used = new Set(miss.map(p => p.category));
-    (DEFAULT.categories || []).forEach(c => {
-      if (used.has(c.id) && !d.categories.some(x => x.id === c.id)) d.categories.push(clone(c));
+    (DEFAULT[K.cats] || []).forEach(c => {
+      if (used.has(c.id) && !d[K.cats].some(x => x.id === c.id)) d[K.cats].push(clone(c));
     });
     touch(); draw();
-    toast(`${miss.length} projeto(s) restaurado(s). Clique em Publicar para colocar no ar.`, 'ok', 7000);
+    toast(`${miss.length} ${K.noun}(s) restaurado(s). Clique em Publicar para colocar no ar.`, 'ok', 7000);
   };
   const restoreBtn = h('button', { type: 'button', class: 'b b--ghost', onclick: restoreOriginals });
 
   const draw = () => {
     const n = missing().length;
     restoreBtn.hidden = !n;
-    restoreBtn.textContent = n === 1 ? '↺ Restaurar 1 projeto original' : `↺ Restaurar ${n} projetos originais`;
-    summary.textContent = `${d.projects.length} projetos · ${d.projects.filter(p => !p.hidden).length} visíveis · a ordem daqui é a ordem do site (arraste para reordenar)`;
-    list.replaceChildren(...(d.projects.length ? d.projects.map((p, i) => {
+    restoreBtn.textContent = n === 1 ? `↺ Restaurar 1 ${K.noun} original` : `↺ Restaurar ${n} ${K.nouns} originais`;
+    summary.textContent = `${items.length} ${K.nouns} · ${items.filter(p => !p.hidden).length} visíveis · a ordem daqui é a ordem do site (arraste para reordenar)`;
+    list.replaceChildren(...(items.length ? items.map((p, i) => {
+      const thumb = thumbOf(p);
+      const nb = (p.blocks || []).length;
       const row = h('div', { class: 'prow' + (p.hidden ? ' is-hidden' : ''), draggable: 'true' },
         h('div', { class: 'prow__order', title: 'Arraste para reordenar' },
           h('button', { type: 'button', class: 'ib', 'aria-label': 'Subir', disabled: i === 0, onclick: () => move(i, i - 1) }, '↑'),
           h('span', { class: 'mono' }, String(i + 1).padStart(2, '0')),
-          h('button', { type: 'button', class: 'ib', 'aria-label': 'Descer', disabled: i === d.projects.length - 1, onclick: () => move(i, i + 1) }, '↓')),
-        h('button', { type: 'button', class: 'prow__thumb', title: 'Editar', onclick: () => editProject(i) },
-          p.poster ? h('img', { src: abs(p.poster), alt: '', loading: 'lazy', draggable: 'false' }) : h('span', {}, 'sem capa')),
+          h('button', { type: 'button', class: 'ib', 'aria-label': 'Descer', disabled: i === items.length - 1, onclick: () => move(i, i + 1) }, '↓')),
+        h('button', { type: 'button', class: 'prow__thumb', title: 'Editar', onclick: () => editItem(kind, i) },
+          thumb ? h('img', { src: abs(thumb), alt: '', loading: 'lazy', draggable: 'false' }) : h('span', {}, 'sem capa')),
         h('div', { class: 'prow__info' },
           h('strong', {}, p.title || 'Sem título'),
           h('span', { class: 'prow__meta mono' }, [catLabel(p.category), p.year, p.duration ? fmtDur(p.duration) : null].filter(Boolean).join(' · ')),
           h('span', { class: 'prow__badges' },
-            p.video ? badge('Vídeo próprio', 'ok') : p.vimeo ? badge('Vimeo') : badge('Sem vídeo', 'warn'),
+            p.video ? badge('Vídeo próprio', 'ok') : ytId(p.youtube) ? badge('YouTube') : p.vimeo ? badge('Vimeo')
+              : nb ? null : badge(kind === 'projects' ? 'Sem vídeo' : 'Vazio', 'warn'),
+            nb > 0 && badge(`${nb} bloco${nb > 1 ? 's' : ''}`, 'ok'),
             p.hidden && badge('Oculto'))),
         h('div', { class: 'prow__actions' },
           h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: () => { p.hidden = !p.hidden; touch(); draw(); } }, p.hidden ? 'Mostrar' : 'Ocultar'),
-          h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: () => editProject(i) }, 'Editar'),
+          h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: () => editItem(kind, i) }, 'Editar'),
           h('button', {
             type: 'button', class: 'b b--danger b--sm',
             onclick: () => {
               if (!confirm(`Excluir “${p.title || 'Sem título'}”?\n\nEle some do site depois que você clicar em Publicar.`)) return;
-              d.projects.splice(i, 1); touch(); draw();
-              toast('Projeto excluído do rascunho. Clique em Publicar para aplicar no site.');
+              items.splice(i, 1); touch(); draw();
+              toast(`${K.Noun} excluído do rascunho. Clique em Publicar para aplicar no site.`);
             },
           }, 'Excluir')));
 
@@ -565,44 +660,59 @@ function viewProjects() {
       row.addEventListener('drop', e => { e.preventDefault(); row.classList.remove('is-over'); if (dragFrom !== null) move(dragFrom, i); dragFrom = null; });
       return row;
     }) : [h('div', { class: 'empty' },
-      h('p', {}, 'Nenhum projeto na lista.'),
+      h('p', {}, kind === 'projects' ? 'Nenhum projeto na lista.' : 'Nenhum trabalho ainda. Clique em “+ Novo trabalho” e monte a página com fotos, antes e depois, 3D…'),
       n > 0 && h('p', { style: 'margin-top:14px' },
-        h('button', { type: 'button', class: 'b b--primary', onclick: restoreOriginals }, `↺ Restaurar os ${n} projetos originais`)))]));
+        h('button', { type: 'button', class: 'b b--primary', onclick: restoreOriginals }, `↺ Restaurar os ${n} ${K.nouns} originais`)))]));
   };
   draw();
-  S.redrawProjects = draw;
+  S.redraw[kind] = draw;
+  if (kind === 'projects') S.redrawProjects = draw;
 
   return frag(
     h('div', { class: 'toolbar' },
-      h('button', { type: 'button', class: 'b b--primary', onclick: () => editProject(-1) }, '+ Novo projeto'),
-      h('button', { type: 'button', class: 'b b--ghost', onclick: () => go('categories') }, '# Categorias'),
+      h('button', { type: 'button', class: 'b b--primary', onclick: () => editItem(kind, -1) }, `+ Novo ${K.noun}`),
+      kind === 'projects' && h('button', { type: 'button', class: 'b b--ghost', onclick: () => go('categories') }, '# Categorias'),
       restoreBtn,
       summary),
     list);
 }
 
-function categoriesEditor() {
+/* ── Design & 3D ── */
+function viewDesigns() {
   const d = S.draft;
+  return frag(
+    viewItems('designs'),
+    box('Categorias desta seção', 'Os filtros da seção Design & 3D. Categorias sem trabalhos visíveis não aparecem no site.',
+      categoriesEditor('designs')),
+    box('Textos da seção', 'A seção fica logo depois dos trabalhos em vídeo (mude a ordem em Seções & menu) e some sozinha enquanto estiver vazia.',
+      grid(field(d.design, 'num', { label: 'Número' }), field(d.design, 'allLabel', { label: 'Filtro “todos”' })),
+      field(d.design, 'title', { label: 'Título', rows: 2, hint: 'Pule linha para quebrar o título.' }),
+      field(d.design, 'subtitle', { label: 'Subtítulo' })));
+}
+
+function categoriesEditor(kind = 'projects') {
+  const d = S.draft;
+  const cats = d[KINDS[kind].cats];
   const wrap = h('div', { class: 'list' });
   const draw = () => wrap.replaceChildren(
-    ...d.categories.map((c, i) => {
-      const used = d.projects.filter(p => p.category === c.id).length;
+    ...cats.map((c, i) => {
+      const used = d[kind].filter(p => p.category === c.id).length;
       const inp = h('input', { type: 'text', 'aria-label': 'Nome da categoria' });
       inp.value = c.label;
       inp.addEventListener('input', () => { c.label = inp.value; touch(); });
       return h('div', { class: 'row' },
         h('span', { class: 'row__n mono' }, String(i + 1).padStart(2, '0')),
         inp,
-        h('span', { class: 'row__count mono muted' }, `${used} proj.`),
-        rowTools(d.categories, i, draw, {
-          beforeDelete: () => !used || confirm(`${used} projeto(s) usam “${c.label}”. Eles vão aparecer só em “Todos”. Remover mesmo?`),
-          onChange: () => S.redrawProjects?.(),
+        h('span', { class: 'row__count mono muted' }, `${used} ${kind === 'projects' ? 'proj.' : 'trab.'}`),
+        rowTools(cats, i, draw, {
+          beforeDelete: () => !used || confirm(`${used} item(ns) usam “${c.label}”. Eles vão aparecer só em “Todos”. Remover mesmo?`),
+          onChange: () => S.redraw[kind]?.(),
         }));
     }),
     h('button', {
       type: 'button', class: 'b b--ghost b--sm',
       onclick: () => {
-        d.categories.push({ id: 'cat-' + Math.random().toString(36).slice(2, 7), label: 'NOVA CATEGORIA' });
+        cats.push({ id: 'cat-' + Math.random().toString(36).slice(2, 7), label: 'NOVA CATEGORIA' });
         touch(); draw();
         [...wrap.querySelectorAll('.row input')].pop()?.select();
       },
@@ -611,50 +721,244 @@ function categoriesEditor() {
   return wrap;
 }
 
-function editProject(i) {
+function editProject(i) { return editItem('projects', i); }
+
+function editItem(kind, i) {
+  const K = KINDS[kind];
+  const list = S.draft[kind];
   const isNew = i < 0;
   const P = isNew
-    ? { id: uid(), title: '', year: new Date().getFullYear(), duration: 0, category: S.draft.categories[0]?.id || '',
-        tag: '', description: '', vimeo: '', video: '', poster: '', hidden: false }
-    : clone(S.draft.projects[i]);
+    ? { id: uid(), title: '', year: new Date().getFullYear(), duration: 0, category: S.draft[K.cats][0]?.id || '',
+        tag: '', description: '', vimeo: '', youtube: '', video: '', poster: '', hidden: false, blocks: [] }
+    : clone(list[i]);
+  P.blocks ||= [];
   const dlg = $('#dlg');
 
   const close = () => dlg.close();
   const save = () => {
     if (S.uploading) return toast('Aguarde o envio terminar.', 'warn');
-    if (!String(P.title).trim()) return toast('Dê um título ao projeto.', 'warn');
+    if (!String(P.title).trim()) return toast(`Dê um título ao ${K.noun}.`, 'warn');
+    const good = P.blocks.filter(blockOk);
+    if (kind === 'designs' && !good.length && !hasVideo(P) && !P.poster) {
+      return toast('Adicione pelo menos um bloco (fotos, antes e depois, 3D, PDF…) ou uma capa.', 'warn');
+    }
+    const dropped = P.blocks.length - good.length;
+    P.blocks = good;
     P.year = P.year === '' ? '' : Number(P.year) || '';
     P.duration = Math.round(Number(P.duration) || 0);
-    if (isNew) S.draft.projects.unshift(P);
-    else S.draft.projects[i] = P;
+    if (isNew) list.unshift(P);
+    else list[i] = P;
     touch(); close();
-    S.redrawProjects?.();
-    toast(isNew ? 'Projeto adicionado no topo. Clique em Publicar para colocar no ar.' : 'Projeto atualizado. Clique em Publicar para aplicar.', 'ok');
+    S.redraw[kind]?.();
+    toast((isNew ? `${K.Noun} adicionado no topo.` : `${K.Noun} atualizado.`)
+      + (dropped ? ` ${dropped} bloco(s) vazio(s) ou incompleto(s) ficaram de fora.` : '')
+      + ' Clique em Publicar para colocar no ar.', dropped ? 'warn' : 'ok', 7000);
   };
 
   const draw = () => $('#dlgInner').replaceChildren(
     h('header', { class: 'dlg__h' },
-      h('h2', {}, isNew ? 'Novo projeto' : 'Editar projeto'),
+      h('h2', {}, isNew ? `Novo ${K.noun}` : `Editar ${K.noun}`),
       h('button', { type: 'button', class: 'ib', 'aria-label': 'Fechar', onclick: close }, '✕')),
     h('div', { class: 'dlg__b' },
       grid(
         field(P, 'title', { label: 'Título' }),
-        field(P, 'tag', { label: 'Rótulo sobre a capa', placeholder: 'Ex.: Abertura' })),
+        field(P, 'tag', { label: 'Rótulo sobre a capa', placeholder: kind === 'projects' ? 'Ex.: Abertura' : 'Ex.: Branding' })),
       grid(
-        catPick(P, draw),
+        catPick(P, draw, kind),
         field(P, 'year', { label: 'Ano', type: 'number' }),
-        field(P, 'duration', { label: 'Duração (segundos)', type: 'number', hint: 'Preenchida sozinha ao enviar um vídeo.' })),
-      field(P, 'description', { label: 'Descrição', rows: 3 }),
-      h('span', { class: 'f__l' }, 'Vídeo'),
-      mediaEditor(P, { name: () => P.title || 'projeto', onMedia: draw }),
+        kind === 'projects' && field(P, 'duration', { label: 'Duração (segundos)', type: 'number', hint: 'Preenchida sozinha ao enviar um vídeo.' })),
+      field(P, 'description', { label: 'Descrição', rows: 3, hint: 'Aparece no card e no topo da página do projeto.' }),
+      h('span', { class: 'f__l' }, kind === 'projects' ? 'Vídeo principal' : 'Vídeo principal (opcional)'),
+      mediaEditor(P, { name: () => P.title || K.noun, onMedia: draw }),
+      h('div', { class: 'blocks-h' },
+        h('h3', {}, 'Página do projeto'),
+        tip('Monte a página com blocos — vídeos, antes e depois, galerias, imagens, textos, modelos 3D, PDFs e botões. No site eles aparecem um embaixo do outro, nesta ordem. Com pelo menos um bloco, o card abre a página do projeto.')),
+      blocksEditor(P),
       field(P, 'hidden', { type: 'toggle', invert: true, label: 'Visível no site', hint: 'Desligue para esconder sem excluir.' })),
     h('footer', { class: 'dlg__f' },
       h('button', { type: 'button', class: 'b b--ghost', onclick: close }, 'Cancelar'),
-      h('button', { type: 'button', class: 'b b--primary', onclick: save }, isNew ? 'Adicionar projeto' : 'Salvar projeto')));
+      h('button', { type: 'button', class: 'b b--primary', onclick: save }, isNew ? `Adicionar ${K.noun}` : `Salvar ${K.noun}`)));
 
   draw();
   dlg.showModal();
   if (isNew) $('#dlgInner input')?.focus();
+}
+
+/* ─────────────────────────────────────────────
+   BLOCOS DA PÁGINA DO PROJETO
+   ───────────────────────────────────────────── */
+const BLOCK_TYPES = {
+  video:   { icon: '▶', label: 'Vídeo',          make: () => ({ type: 'video', title: '', video: '', vimeo: '', youtube: '', poster: '' }) },
+  compare: { icon: '⇆', label: 'Antes e depois', make: () => ({ type: 'compare', before: '', after: '', caption: '' }) },
+  gallery: { icon: '▦', label: 'Galeria',        make: () => ({ type: 'gallery', title: '', columns: '3', images: [] }) },
+  image:   { icon: '▣', label: 'Imagem',         make: () => ({ type: 'image', src: '', caption: '' }) },
+  text:    { icon: '¶', label: 'Texto',          make: () => ({ type: 'text', title: '', body: '' }) },
+  model:   { icon: '◈', label: 'Modelo 3D',      make: () => ({ type: 'model', title: '', src: '', poster: '' }) },
+  pdf:     { icon: '▤', label: 'PDF',            make: () => ({ type: 'pdf', src: '', label: 'VER PDF' }) },
+  link:    { icon: '↗', label: 'Botão com link', make: () => ({ type: 'link', label: 'VER NO BEHANCE', url: '' }) },
+};
+const blockOk = b => {
+  if (!b) return false;
+  switch (b.type) {
+    case 'video':   return hasVideo(b);
+    case 'compare': return !!(b.before && b.after);
+    case 'gallery': return (b.images || []).some(x => x && x.src);
+    case 'image':   return !!b.src;
+    case 'text':    return !!(String(b.title || '').trim() || String(b.body || '').trim());
+    case 'model':   return !!b.src;
+    case 'pdf':     return !!b.src;
+    case 'link':    return !!(String(b.url || '').trim() && String(b.label || '').trim());
+    default:        return false;
+  }
+};
+
+/* arquivo qualquer (3D, PDF): envio, abrir, remover ou colar endereço */
+function fileEditor(obj, key, { label = 'Arquivo', accept = '*/*', folder = 'files', onChange } = {}) {
+  const wrap = h('div', { class: 'poster' });
+  const prog = progressBar();
+  const draw = () => {
+    const input = h('input', { type: 'file', accept, hidden: true });
+    input.addEventListener('change', async () => {
+      const f = input.files[0];
+      if (!f) return;
+      try {
+        prog.show();
+        obj[key] = await uploadFile(f, folder, p => prog.set(p, 'Enviando'));
+        touch(); onChange?.(obj[key]); draw();
+        toast('Arquivo enviado.', 'ok');
+      } catch (e) { toast('Falha no envio: ' + e.message, 'err', 8000); }
+      finally { prog.hide(); }
+    });
+    const url = h('input', { type: 'text', class: 'poster__url mono', placeholder: 'ou cole o endereço do arquivo', 'aria-label': 'Endereço do arquivo' });
+    url.value = obj[key] || '';
+    url.addEventListener('change', () => { obj[key] = url.value.trim(); touch(); onChange?.(obj[key]); draw(); });
+    let nameTxt = '';
+    try { nameTxt = obj[key] ? decodeURIComponent(String(obj[key]).split('?')[0].split('/').pop()) : ''; } catch { nameTxt = obj[key]; }
+    wrap.replaceChildren(
+      h('span', { class: 'f__l' }, label),
+      h('div', { class: 'media__actions' },
+        h('button', { type: 'button', class: 'b b--primary b--sm', onclick: () => input.click() }, obj[key] ? 'Trocar arquivo' : 'Escolher arquivo'),
+        obj[key] && h('a', { class: 'b b--ghost b--sm', href: abs(obj[key]), target: '_blank', rel: 'noopener' }, 'Abrir'),
+        obj[key] && h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: () => { obj[key] = ''; touch(); onChange?.(''); draw(); } }, 'Remover'),
+        input),
+      nameTxt && h('small', { class: 'f__h mono' }, nameTxt),
+      url, prog.el);
+  };
+  draw();
+  return wrap;
+}
+
+/* tira uma "foto" do modelo 3D para usar de capa */
+let mvLoad = null;
+async function modelPoster(src) {
+  try { await (mvLoad ||= import(MODEL_VIEWER)); } catch (e) { mvLoad = null; throw e; }
+  const holder = h('div', { style: 'position:fixed;right:0;bottom:0;width:800px;height:500px;opacity:.01;pointer-events:none;z-index:-1' });
+  const mv = document.createElement('model-viewer');
+  mv.style.cssText = 'width:100%;height:100%';
+  mv.setAttribute('shadow-intensity', '1');
+  holder.append(mv);
+  document.body.append(holder);
+  try {
+    const loaded = new Promise((res, rej) => {
+      mv.addEventListener('load', res, { once: true });
+      mv.addEventListener('error', () => rej(new Error('modelo inválido')), { once: true });
+      setTimeout(() => rej(new Error('tempo esgotado')), 30000);
+    });
+    mv.src = abs(src);
+    await loaded;
+    await new Promise(r => setTimeout(r, 800));
+    const blob = await mv.toBlob({ mimeType: 'image/webp', qualityArgument: 0.9 });
+    if (!blob || !blob.size) throw new Error('capa vazia');
+    return blob;
+  } finally { holder.remove(); }
+}
+
+function blockFields(b, P) {
+  switch (b.type) {
+    case 'video': return [
+      field(b, 'title', { label: 'Título (opcional)', placeholder: 'Ex.: Making of' }),
+      mediaEditor(b, { name: () => b.title || P.title || 'video' })];
+    case 'compare': return [
+      grid(imageEditor(b, 'before', { label: 'Antes', name: () => (P.title || 'projeto') + '-antes' }),
+           imageEditor(b, 'after', { label: 'Depois', name: () => (P.title || 'projeto') + '-depois' })),
+      field(b, 'caption', { label: 'Legenda (opcional)', placeholder: 'Ex.: Logo antigo → logo novo', hint: 'Use imagens com o mesmo tamanho e enquadramento.' })];
+    case 'gallery': return [
+      grid(field(b, 'title', { label: 'Título (opcional)', placeholder: 'Ex.: Bastidores' }),
+           field(b, 'columns', { label: 'Colunas no computador', options: [2, 3, 4, 5].map(n => ({ value: String(n), label: String(n) })) })),
+      galleryEditor(b)];
+    case 'image': return [
+      imageEditor(b, 'src', { label: 'Imagem', name: () => P.title || 'imagem' }),
+      field(b, 'caption', { label: 'Legenda (opcional)' })];
+    case 'text': return [
+      field(b, 'title', { label: 'Título (opcional)' }),
+      field(b, 'body', { label: 'Texto', rows: 6, hint: 'Deixe uma linha em branco entre os parágrafos.' }),
+      RICH_HINT.cloneNode(true)];
+    case 'model': {
+      const poster = h('div');
+      const drawPoster = () => poster.replaceChildren(imageEditor(b, 'poster', { label: 'Capa do 3D (opcional)', name: () => (P.title || 'modelo') + '-3d' }));
+      drawPoster();
+      const auto = async () => {
+        if (!b.src) return toast('Envie o arquivo 3D primeiro.', 'warn');
+        toast('Gerando a capa do 3D…', '', 6000);
+        try {
+          const blob = await modelPoster(b.src);
+          b.poster = await uploadFile(new File([blob], `${slugify(P.title) || 'modelo'}-3d.webp`, { type: 'image/webp' }), 'images');
+          if (!P.poster && !thumbOf({ ...P, blocks: [] })) P.poster = b.poster;
+          touch(); drawPoster();
+          toast('Capa do 3D gerada.', 'ok');
+        } catch (e) { toast(`Não deu para gerar a capa (${e.message}). Envie uma imagem.`, 'err', 7000); }
+      };
+      return [
+        field(b, 'title', { label: 'Título (opcional)' }),
+        fileEditor(b, 'src', { label: 'Arquivo 3D (.glb)', accept: '.glb,.gltf,model/gltf-binary,model/gltf+json', folder: '3d', onChange: v => { if (v && !b.poster) auto(); } }),
+        tip('Use GLB (arquivo único). No Blender ou no Cinema 4D: exportar como glTF Binary (.glb). No site dá para girar e dar zoom.'),
+        poster,
+        h('div', { class: 'media__actions' }, h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: auto }, 'Gerar capa a partir do 3D'))];
+    }
+    case 'pdf': return [
+      fileEditor(b, 'src', { label: 'Arquivo PDF', accept: 'application/pdf,.pdf', folder: 'docs' }),
+      field(b, 'label', { label: 'Texto do botão', placeholder: 'VER APRESENTAÇÃO COMPLETA' })];
+    case 'link': return [
+      grid(field(b, 'label', { label: 'Texto do botão', placeholder: 'VER NO BEHANCE' }),
+           field(b, 'url', { label: 'Link', placeholder: 'https://…, @usuario ou número do WhatsApp' }))];
+    default: return [];
+  }
+}
+
+function blocksEditor(P) {
+  const wrap = h('div', { class: 'blocks' });
+  const draw = focusIndex => {
+    const cards = P.blocks.map((b, i) => {
+      const t = BLOCK_TYPES[b.type] || { icon: '•', label: b.type };
+      return h('div', { class: 'blk' + (blockOk(b) ? '' : ' is-empty') },
+        h('div', { class: 'blk__h' },
+          h('span', { class: 'blk__n mono' }, String(i + 1).padStart(2, '0')),
+          h('span', { class: 'blk__i' }, t.icon),
+          h('strong', {}, t.label),
+          h('span', { class: 'badge badge--warn blk__warn', hidden: blockOk(b) }, 'Incompleto'),
+          rowTools(P.blocks, i, () => draw(), { beforeDelete: blk => !blockOk(blk) || confirm(`Remover o bloco “${t.label}”?`) })),
+        h('div', { class: 'blk__b' }, blockFields(b, P)));
+    });
+    wrap.replaceChildren(
+      ...(cards.length ? cards : [h('p', { class: 'empty' }, 'Nenhum bloco ainda. Escolha abaixo o que colocar na página do projeto.')]),
+      h('div', { class: 'blk-add' },
+        h('span', { class: 'f__l' }, 'Adicionar bloco'),
+        h('div', { class: 'blk-add__btns' }, Object.entries(BLOCK_TYPES).map(([type, t]) =>
+          h('button', {
+            type: 'button', class: 'b b--ghost b--sm',
+            onclick: () => { P.blocks.push(t.make()); touch(); draw(P.blocks.length - 1); },
+          }, `+ ${t.icon} ${t.label}`)))));
+    if (focusIndex != null) wrap.children[focusIndex]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  // selo "Incompleto" acompanha o preenchimento (digitação e envios chamam touch)
+  S.refreshBlocks = () => wrap.querySelectorAll(':scope > .blk').forEach((el, i) => {
+    const ok = blockOk(P.blocks[i]);
+    el.classList.toggle('is-empty', !ok);
+    const warn = el.querySelector('.blk__warn');
+    if (warn) warn.hidden = ok;
+  });
+  draw();
+  return wrap;
 }
 
 /* ── Categorias ── */
@@ -666,16 +970,17 @@ function viewCategories() {
 }
 
 /* seletor de categoria com criação na hora (usado no editor de projeto) */
-function catPick(P, redraw) {
+function catPick(P, redraw, kind = 'projects') {
+  const cats = S.draft[KINDS[kind].cats];
   return h('div', { class: 'catpick' },
-    field(P, 'category', { label: 'Categoria', options: [{ value: '', label: '— sem categoria —' }, ...S.draft.categories.map(c => ({ value: c.id, label: c.label }))] }),
+    field(P, 'category', { label: 'Categoria', options: [{ value: '', label: '— sem categoria —' }, ...cats.map(c => ({ value: c.id, label: c.label }))] }),
     h('button', {
       type: 'button', class: 'b b--ghost b--sm',
       onclick: () => {
         const label = (prompt('Nome da nova categoria:') || '').trim();
         if (!label) return;
         const c = { id: 'cat-' + Math.random().toString(36).slice(2, 7), label };
-        S.draft.categories.push(c);
+        cats.push(c);
         P.category = c.id;
         touch(); redraw();
         toast(`Categoria “${label}” criada.`, 'ok');
@@ -696,6 +1001,7 @@ function loadFonts(ty) {
 const BUILTIN_SECTIONS = {
   ticker:  { label: 'Faixa de palavras', icon: '↔', tab: 'clients' },
   works:   { label: 'Trabalhos',         icon: '▦', tab: 'projects' },
+  design:  { label: 'Design & 3D',       icon: '◈', tab: 'designs' },
   about:   { label: 'Sobre',             icon: '◉', tab: 'about' },
   clients: { label: 'Clientes',          icon: '↔', tab: 'clients' },
   contact: { label: 'Contato',           icon: '✉', tab: 'contact' },
@@ -1051,14 +1357,16 @@ function viewContact() {
       grid(field(c, 'line1', { label: 'Título — linha 1' }), field(c, 'line2', { label: 'Título — linha 2 (vazada)' }))),
     box('E-mail', null,
       field(c, 'email', { label: 'E-mail de contato', type: 'email', hint: 'Deixe vazio para não mostrar.' })),
-    box('Redes e links', 'Aparecem como botões no contato e no menu do celular.',
+    box('Redes e links', 'Aparecem como botões no contato, no menu do celular e no rodapé — cada um com o ícone certo, escolhido pelo link (Instagram, WhatsApp, YouTube, Vimeo, LinkedIn, Behance, TikTok, e-mail…).',
       objList(c.links, [
         { key: 'label', label: 'Nome', w: '1fr', placeholder: 'Instagram' },
         { key: 'handle', label: 'Texto pequeno', w: '1fr', placeholder: '@usuario ↗' },
-        { key: 'url', label: 'Link', w: '1.4fr', placeholder: 'https://…', type: 'url' },
-      ], { addLabel: 'Adicionar link' })),
+        { key: 'url', label: 'Link', w: '1.4fr', placeholder: 'https://… ou número do WhatsApp' },
+      ], { addLabel: 'Adicionar link' }),
+      tip('WhatsApp: coloque só o número com DDD e país (ex.: 55 48 99999-9999) que o link é criado sozinho. Para o canal do YouTube, cole o link do canal (youtube.com/@seucanal).')),
     box('Rodapé', null,
-      grid(field(f, 'name', { label: 'Nome (após o ©)' }), field(f, 'note', { label: 'Texto do meio' }), field(f, 'backToTop', { label: 'Link “voltar ao topo”' }))));
+      grid(field(f, 'name', { label: 'Nome (após o ©)' }), field(f, 'note', { label: 'Texto do meio' }), field(f, 'backToTop', { label: 'Link “voltar ao topo”' })),
+      field(f, 'social', { type: 'toggle', label: 'Mostrar as redes com ícones no rodapé' })));
 }
 
 /* ── Cores & efeitos ── */
@@ -1130,14 +1438,14 @@ function viewGeneral() {
   const reel = d.showreel;
   const reelBox = h('div', { class: 'stack' });
   const drawReel = () => {
-    const withMedia = d.projects.filter(p => p.video || p.vimeo);
+    const withMedia = d.projects.filter(p => p.video || p.vimeo || ytId(p.youtube));
     const sel = h('select', { 'aria-label': 'Copiar vídeo de um projeto' },
       h('option', { value: '' }, 'Copiar o vídeo de um projeto…'),
       withMedia.map(p => h('option', { value: p.id }, p.title)));
     sel.addEventListener('change', () => {
       const p = d.projects.find(x => x.id === sel.value);
       if (!p) return;
-      Object.assign(reel, { vimeo: p.vimeo || '', video: p.video || '', poster: p.poster || '' });
+      Object.assign(reel, { vimeo: p.vimeo || '', youtube: p.youtube || '', video: p.video || '', poster: p.poster || '' });
       touch(); drawReel(); toast(`Showreel agora usa o vídeo de “${p.title}”.`);
     });
     reelBox.replaceChildren(
@@ -1246,7 +1554,9 @@ function viewMedia() {
         h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: load }, 'Atualizar')),
       rows.length
         ? h('div', { class: 'mgrid' }, rows.map(r => h('div', { class: 'mitem' },
-            isImg(r.pathname) ? h('img', { src: r.url, alt: '', loading: 'lazy' }) : h('video', { src: r.url + '#t=0.5', preload: 'metadata', muted: true }),
+            isImg(r.pathname) ? h('img', { src: r.url, alt: '', loading: 'lazy' })
+              : isVid(r.pathname) ? h('video', { src: r.url + '#t=0.5', preload: 'metadata', muted: true })
+              : h('div', { class: 'mitem__file' }, /\.pdf$/i.test(r.pathname) ? 'PDF' : /\.(glb|gltf)$/i.test(r.pathname) ? '3D' : 'ARQUIVO'),
             h('div', { class: 'mitem__i' },
               h('span', { class: 'mitem__n', title: r.pathname }, r.pathname.split('/').pop()),
               h('span', { class: 'mono muted' }, fmtBytes(r.size)),
@@ -1342,6 +1652,7 @@ const KEY_NAMES = {
   typography: 'Fontes', effects: 'Efeitos', hero: 'Início', about: 'Sobre e listas', clients: 'Clientes',
   ticker: 'Faixa de palavras', contact: 'Contato', footer: 'Rodapé', seo: 'Google e compartilhamento',
   brand: 'Marca', showreel: 'Showreel', works: 'Seção de trabalhos',
+  designs: 'Design & 3D', designCategories: 'Categorias de design', design: 'Seção Design & 3D',
 };
 const changedKeys = (a, b) => [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])]
   .filter(k => k !== 'savedAt' && JSON.stringify(a?.[k]) !== JSON.stringify(b?.[k]));
@@ -1528,6 +1839,7 @@ async function start() {
   S.draft = hydrate(data);
   S.base = data?.savedAt || '';
   S.saved = clone(S.draft);
+  applyAdminTheme(S.draft.theme);
   renderTabs();
   go(location.hash.slice(1) || 'projects');
   touch();
