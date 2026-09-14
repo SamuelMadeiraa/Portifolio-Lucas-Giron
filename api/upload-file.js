@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { requireAdmin } from './_lib/auth.js';
 import { mode, uploadsDir } from './_lib/storage.js';
 
-const EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg', 'mp4', 'webm', 'mov', 'pdf']);
+const EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg', 'mp4', 'webm', 'mov', 'pdf', 'glb', 'gltf']);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido.' });

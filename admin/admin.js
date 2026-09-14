@@ -32,11 +32,14 @@
   /* ══════════ CONSTANTES ══════════ */
   const BLOB_CLIENT = 'https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/dist/client.js/+esm';
   const CDN = 'https://i.vimeocdn.com/video/';
-  const LOCAL_UPLOAD = 'Envio de fotos e vídeos só funciona com o site na Vercel.';
+  const LOCAL_UPLOAD = 'Envio de arquivos só funciona com o site publicado (Vercel ou servidor Docker).';
+  const MODEL_VIEWER = 'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js';
   const LABELS = {
     navWorks: 'Trabalhos', navAbout: 'Sobre', navContact: 'Contato', specialty: 'Especialidade',
     works: 'Trabalhos\nSelecionados', all: 'Todos', about: 'Sobre', tools: 'Ferramentas',
     services: 'Serviços', clients: 'No ar para', showreel: 'Ver showreel',
+    navDesign: 'Design', designs: 'Design\n& 3D', gallery: 'Galeria', compare: 'Antes e depois',
+    before: 'Antes', after: 'Depois', model: 'Modelo 3D',
   };
   const SHOW = {
     loader: 'Tela de carregamento (barras coloridas)',
@@ -45,6 +48,7 @@
     about: 'Seção “Sobre”',
     clients: 'Faixa de clientes',
     onair: 'Barra “No ar” no contato',
+    designs: 'Seção “Design, fotos e 3D”',
   };
   const PRESETS = [
     { name: 'Broadcast', bg: '#08080A', fg: '#F2EFE9', accent: '#FF3B00' },
@@ -73,6 +77,7 @@
     media: [],        // arquivos enviados: { path, url, name, size }
     uploadMode: 'blob', // 'blob' = Vercel Blob · 'direct' = servidor próprio (Docker)
     previewWin: null,
+    pending: new Map(), // modo de teste: arquivos escolhidos que ainda não subiram (caminho → { file, url, name, size })
   };
 
   /* ══════════ API ══════════ */
@@ -126,6 +131,10 @@
     if (!Array.isArray(c.clients)) c.clients = [];
     arr(obj('contact'), 'links');
     if (!Array.isArray(c.projects)) c.projects = [];
+    if (!Array.isArray(c.designCategories)) {
+      c.designCategories = [{ key: 'design', label: 'Design gráfico' }, { key: 'foto', label: 'Fotografia' }, { key: '3d', label: '3D' }];
+    }
+    if (!Array.isArray(c.designs)) c.designs = [];
     return c;
   }
 
@@ -153,8 +162,15 @@
     })(c);
   }
 
-  const assetUrl = p => (!p ? '' : /^(https?:|data:|blob:|\/)/.test(p) ? p : '../' + p);
-  const kindOf = p => /\.(jpe?g|png|webp|gif|svg|avif)(\?|$)/i.test(p) ? 'image' : /\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(p) ? 'video' : 'file';
+  const assetUrl = p => (!p ? '' : S.pending.has(p) ? S.pending.get(p).url : /^(https?:|data:|blob:|\/)/.test(p) ? p : '../' + p);
+  const normUrl = u => { u = String(u || '').trim(); return !u ? '' : /^(https?:|mailto:|tel:)/i.test(u) ? u : 'https://' + u; };
+  const kindOf = p => /\.(jpe?g|png|webp|gif|svg|avif)(\?|$)/i.test(p) ? 'image'
+    : /\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(p) ? 'video'
+    : /\.(glb|gltf)(\?|$)/i.test(p) ? 'model'
+    : /\.pdf(\?|$)/i.test(p) ? 'pdf' : 'file';
+  const arr = v => (Array.isArray(v) ? v : []);
+  const imagesOf = p => arr(p.images).filter(Boolean);
+  const pairsOf = p => arr(p.compare).filter(c => c && c.before && c.after);
 
   /* ══════════ TOAST / CONFIRMAÇÃO ══════════ */
   let toastT;
@@ -212,7 +228,7 @@
   }
 
   window.LG_PREVIEW = null;
-  const previewData = () => ({ content: S.content, files: {} });
+  const previewData = () => ({ content: S.content, files: Object.fromEntries([...S.pending].map(([k, v]) => [k, v.url])) });
   function openPreview() {
     window.LG_PREVIEW = previewData();
     try { localStorage.setItem('lg-preview', JSON.stringify(S.content)); } catch (e) { /* cheio */ }
@@ -342,6 +358,7 @@
     applyAdminTheme();
     renderProjects();
     renderCats();
+    renderDesigns();
     renderSections();
     renderTexts();
     renderVisual();
@@ -368,8 +385,11 @@
   const EXT = {
     'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/avif': 'avif',
     'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'application/pdf': 'pdf',
+    'model/gltf-binary': 'glb', 'model/gltf+json': 'gltf',
   };
   const extOf = f => EXT[f.type] || (f.name.match(/\.([a-z0-9]{2,5})$/i) || [, 'bin'])[1].toLowerCase();
+  // o Windows costuma mandar .glb sem tipo → descobre pela extensão
+  const TYPE_BY_EXT = { ...Object.fromEntries(Object.entries(EXT).map(([t, e]) => [e, t])), jpeg: 'image/jpeg' };
 
   // imagens grandes → redimensiona (máx. 2400px) e converte para WebP
   async function optimizeImage(file) {
@@ -409,16 +429,29 @@
 
   let blobMod = null;
   async function uploadFile(file, { quiet = false } = {}) {
-    if (S.local) throw new Error(LOCAL_UPLOAD);
-    if (!S.storage) throw new Error('O armazenamento não está ligado — conecte um Blob Store ao projeto na Vercel.');
+    if (!S.local && !S.storage) throw new Error('O armazenamento não está ligado — conecte um Blob Store ao projeto na Vercel.');
     let f = file;
     if (f.type.startsWith('image/')) f = await optimizeImage(f);
-    if (!EXT[f.type]) throw new Error(`“${file.name}”: tipo de arquivo não aceito. Use JPG, PNG, WebP, GIF, MP4, WebM ou PDF.`);
+    if (!EXT[f.type]) {
+      const ext = (file.name.match(/\.([a-z0-9]{2,5})$/i) || [])[1];
+      const type = ext && TYPE_BY_EXT[ext.toLowerCase()];
+      if (type) f = new File([f], f.name, { type });
+    }
+    if (!EXT[f.type]) throw new Error(`“${file.name}”: tipo de arquivo não aceito. Use JPG, PNG, WebP, GIF, MP4, WebM, PDF ou GLB.`);
     if (f.size > 500 * 1048576) throw new Error(`“${file.name}” tem ${fmtSize(f.size)} — o limite é 500 MB. Para vídeos maiores, use Vimeo/YouTube.`);
     const d = new Date();
     const base = slug(file.name.replace(/\.[^.]+$/, '')) || 'arquivo';
     const pathname = `uploads/${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${base}.${extOf(f)}`;
     const label = file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name;
+    // modo de teste (sem servidor): guarda o arquivo aqui; ele vai junto no "Baixar arquivos"
+    if (S.local) {
+      const local = pathname.replace(/(\.[a-z0-9]+)$/i, `-${Math.random().toString(36).slice(2, 6)}$1`);
+      const url = URL.createObjectURL(f);
+      S.pending.set(local, { file: f, url, name: local.split('/').pop(), size: f.size });
+      S.media.unshift({ path: local, url, name: local.split('/').pop(), size: f.size, pending: true });
+      if (!quiet) toast('Arquivo adicionado (vai junto em “Baixar arquivos”).');
+      return local;
+    }
     const progress = pct => { if (!quiet) toast(`Enviando ${label}… ${Math.round(pct)}%`, false, true); };
     if (!quiet) toast(`Enviando ${label}…`, false, true);
     try {
@@ -560,16 +593,23 @@
     const w = el('div', 'field', label(text, o.hint));
     const box = el('div', 'img-field');
     w.append(box);
-    const video = o.accept === 'video';
+    const kind = o.accept || 'image';
+    const ACCEPT = { image: 'image/*', video: 'video/*', model: '.glb,.gltf,model/gltf-binary,model/gltf+json', pdf: 'application/pdf,.pdf' };
+    const EMPTY = { image: 'sem imagem', video: 'sem vídeo', model: 'sem 3D', pdf: 'sem PDF' };
     const on = o.on || changed;
     const draw = () => {
       const p = getP(obj, path);
       const u = assetUrl(p);
-      box.innerHTML = `<div class="img-field__prev${o.square ? ' img-field__prev--sq' : ''}">${u
-        ? (video || kindOf(p) === 'video' ? `<video src="${esc(u)}#t=0.5" muted preload="metadata"></video>` : `<img src="${esc(u)}" alt="">`)
-        : `<span>${video ? 'sem vídeo' : 'sem imagem'}</span>`}</div>
-        <div><div class="img-field__btns">
-          <label class="btn btn--sm">Enviar do computador<input type="file" accept="${video ? 'video/*' : 'image/*'}"></label>
+      let name = '';
+      try { name = p ? decodeURIComponent(String(p).split('?')[0].split('/').pop()) : ''; } catch (e) { name = String(p); }
+      let prev = `<span>${EMPTY[kind]}</span>`;
+      if (u && (kind === 'video' || kindOf(p) === 'video')) prev = `<video src="${esc(u)}#t=0.5" muted preload="metadata"></video>`;
+      else if (u && kind === 'model') prev = '<span class="proj__icon">🧊</span>';
+      else if (u && kind === 'pdf') prev = `<a class="proj__icon" href="${esc(u)}" target="_blank" rel="noopener" title="Abrir PDF">📄</a>`;
+      else if (u) prev = `<img src="${esc(u)}" alt="">`;
+      box.innerHTML = `<div class="img-field__prev${o.square ? ' img-field__prev--sq' : ''}">${prev}</div>
+        <div>${name && (kind === 'model' || kind === 'pdf') ? `<span class="hint" style="display:block;margin:0 0 8px;word-break:break-all">${esc(name)}</span>` : ''}<div class="img-field__btns">
+          <label class="btn btn--sm">Enviar do computador<input type="file" accept="${ACCEPT[kind]}"></label>
           <button class="btn btn--sm btn--ghost" type="button" data-a="lib">Biblioteca</button>
           ${p ? '<button class="btn btn--sm btn--ghost" type="button" data-a="rm">Remover</button>' : ''}
         </div></div>`;
@@ -590,7 +630,7 @@
         }
       });
       $('[data-a="lib"]', box).addEventListener('click', async () => {
-        const np = await pickMedia(video ? 'video' : 'image');
+        const np = await pickMedia(kind);
         if (np) { setP(obj, path, np); await on(np); draw(); }
       });
       const rm = $('[data-a="rm"]', box);
@@ -734,6 +774,63 @@
     return w;
   }
 
+  // antes e depois: pares de imagens (CRUD)
+  function fCompare(obj, path, text, o = {}) {
+    const w = el('div', 'field', label(text, o.hint));
+    const list = el('div', 'list');
+    const add = el('button', 'btn btn--sm add-row', '+ Adicionar antes e depois');
+    add.type = 'button';
+    w.append(list, add);
+    const on = o.on || changed;
+    const draw = () => {
+      list.innerHTML = '';
+      const a = listArr(obj, path);
+      if (!a.length) list.append(el('div', 'empty', 'Nenhuma comparação.'));
+      a.forEach((it, i) => {
+        const row = el('div', 'li');
+        const bodyEl = el('div', 'li__body');
+        bodyEl.append(
+          grid2(fImage(it, 'before', 'Antes', { on }), fImage(it, 'after', 'Depois', { on })),
+          fText(it, 'label', 'Legenda (opcional)', { on, ph: 'Ex.: Logo antigo → logo novo' }),
+        );
+        row.append(bodyEl, rowActions(a, i, () => { draw(); on(); }));
+        list.append(row);
+      });
+    };
+    add.addEventListener('click', () => { listArr(obj, path).push({ before: '', after: '', label: '' }); draw(); on(); });
+    draw();
+    return w;
+  }
+
+  // campos de galeria, antes/depois, descrição e link (projetos de vídeo e de design)
+  function extrasFields(p) {
+    if (!p.link) p.link = { label: '', url: '' };
+    return [
+      el('h3', 'group-t mono', 'Página do projeto'),
+      fText(p, 'desc', 'Descrição', { multi: true, rows: 5, on: noop, hint: `aparece ao abrir o projeto — ${RICH}` }),
+      grid2(
+        fText(p, 'link.label', 'Texto do botão', { on: noop, ph: 'Ex.: Ver no Behance' }),
+        fText(p, 'link.url', 'Link do botão', { on: noop, ph: 'https://…' }),
+      ),
+      el('h3', 'group-t mono', 'Galeria de fotos'),
+      fImgList(p, 'images', 'Fotos', { on: noop, hint: 'no site, clicar amplia; use ← → para ordenar' }),
+      el('h3', 'group-t mono', 'Antes e depois'),
+      fCompare(p, 'compare', 'Comparações', { on: noop, hint: 'de preferência, imagens com o mesmo tamanho e enquadramento' }),
+    ];
+  }
+  function cleanExtras(p) {
+    if (!String(p.desc || '').trim()) delete p.desc;
+    if (Array.isArray(p.images)) { p.images = p.images.filter(Boolean); if (!p.images.length) delete p.images; }
+    if (Array.isArray(p.compare)) {
+      p.compare = pairsOf(p).map(c => (c.label ? { before: c.before, after: c.after, label: c.label } : { before: c.before, after: c.after }));
+      if (!p.compare.length) delete p.compare;
+    }
+    if (p.link && !String(p.link.url || '').trim()) delete p.link;
+    ['model', 'doc', 'thumb', 'c'].forEach(k => { if (!p[k]) delete p[k]; });
+    return p;
+  }
+  const incompletePairs = p => arr(p.compare).some(c => c && (Boolean(c.before) !== Boolean(c.after)));
+
   const grid2 = (...els) => { const g = el('div', 'grid2'); g.append(...els); return g; };
   const grid3 = (...els) => { const g = el('div', 'grid3'); g.append(...els); return g; };
   function card(title, hint) {
@@ -783,18 +880,18 @@
 
   /* ══════════ BIBLIOTECA (escolher arquivo já enviado) ══════════ */
   const prevHtml = m => {
-    const k = kindOf(m.url);
+    const k = kindOf(m.path || m.url);
     if (k === 'image') return `<img src="${esc(m.url)}" alt="" loading="lazy">`;
     if (k === 'video') return `<video src="${esc(m.url)}#t=0.5" muted preload="metadata"></video>`;
     return '📄';
   };
   function pickMedia(kind) {
     return new Promise(res => {
-      const items = S.media.filter(m => kindOf(m.url) === kind);
+      const items = S.media.filter(m => kindOf(m.path || m.url) === kind);
       const d = el('div', 'confirm', `<div class="confirm__box" style="width:min(100%,760px);max-height:86vh;display:flex;flex-direction:column">
         <div class="row" style="justify-content:space-between"><h3>Escolher da biblioteca</h3><button type="button" class="icon-btn" data-x aria-label="Fechar">✕</button></div>
         <div class="media" style="overflow:auto">${items.length ? items.map(m => `
-          <button type="button" class="mi" data-p="${esc(m.url)}" style="padding:0;text-align:left;cursor:pointer">
+          <button type="button" class="mi" data-p="${esc(m.path)}" style="padding:0;text-align:left;cursor:pointer">
             <div class="mi__prev">${prevHtml(m)}</div><div class="mi__info"><span class="mi__n">${esc(m.name)}</span></div>
           </button>`).join('') : `<div class="empty" style="grid-column:1/-1">Nenhum${kind === 'video' ? ' vídeo' : 'a imagem'} na biblioteca ainda. Use “Enviar do computador”.</div>`}</div></div>`);
       document.body.append(d);
@@ -853,7 +950,13 @@
   }
 
   /* ══════════ PROJETOS ══════════ */
-  const catLabel = key => (S.content.categories.find(c => c.key === key) || {}).label || key || 'sem categoria';
+  const catLabel = (key, cats = 'categories') => (arr(S.content[cats]).find(c => c.key === key) || {}).label || key || 'sem categoria';
+  const extraChips = p => [
+    imagesOf(p).length ? `<span class="chip">${imagesOf(p).length} foto${imagesOf(p).length === 1 ? '' : 's'}</span>` : '',
+    pairsOf(p).length ? '<span class="chip">antes/depois</span>' : '',
+    p.model ? '<span class="chip">3D</span>' : '',
+    p.doc ? '<span class="chip">PDF</span>' : '',
+  ].join('');
   function projThumb(p) {
     if (p.thumb) return { img: assetUrl(p.thumb) };
     if (p.th) return { img: `${CDN}${p.th}_640` };
@@ -869,14 +972,14 @@
     if (!a.length) { list.innerHTML = '<div class="empty">Nenhum projeto ainda. Cole um link ou envie um vídeo acima.</div>'; return; }
     list.innerHTML = a.map((p, i) => {
       const t = projThumb(p);
-      const src = p.file ? 'Arquivo' : p.yt ? 'YouTube' : 'Vimeo';
+      const src = p.file ? 'Arquivo' : p.yt ? 'YouTube' : p.id ? 'Vimeo' : 'Link';
       return `<div class="proj${p.hidden ? ' is-off' : ''}" data-i="${i}">
         <span class="proj__handle" title="Arraste para reordenar">⠿</span>
         <div class="proj__thumb">${t.img ? `<img src="${esc(t.img)}" alt="" loading="lazy">` : t.video ? `<video src="${esc(t.video)}#t=0.5" muted preload="metadata"></video>` : ''}<b>${pad(i + 1)}</b></div>
         <div class="proj__info" data-act="edit" style="cursor:pointer">
           <span class="proj__t">${esc(p.t || 'Sem título')}</span>
           <div class="proj__m">
-            <span class="chip chip--accent">${esc(catLabel(p.cat))}</span><span class="chip">${src}</span>
+            <span class="chip chip--accent">${esc(catLabel(p.cat))}</span><span class="chip">${src}</span>${extraChips(p)}
             ${p.hidden ? '<span class="chip chip--warn">oculto</span>' : ''}
             ${p.y ? `<span>${esc(p.y)}</span>` : ''}${p.c ? `<span>${esc(p.c)}</span>` : ''}
           </div>
@@ -892,34 +995,37 @@
     }).join('');
   }
 
-  $('#projList').addEventListener('click', async e => {
-    const b = e.target.closest('[data-act]');
-    if (!b) return;
-    const row = b.closest('[data-i]');
-    const i = +row.dataset.i;
-    const a = S.content.projects;
-    const p = a[i];
-    switch (b.dataset.act) {
-      case 'up': if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; break;
-      case 'down': if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; break;
-      case 'toggle': if (p.hidden) delete p.hidden; else p.hidden = true; break;
-      case 'edit': editProject(p, false); return;
-      case 'del':
-        if (!await ask('Excluir projeto?', `“${p.t || 'Sem título'}” será removido do site.`, { ok: 'Excluir', danger: true })) return;
-        a.splice(i, 1);
-        toast('Projeto excluído.');
-        break;
-      default: return;
-    }
-    renderProjects(); renderCats(); changed();
-  });
-  sortable($('#projList'), () => S.content.projects, () => renderProjects());
+  // ações das listas (subir, descer, ocultar, editar, excluir, arrastar)
+  function bindItemList(sel, key, render, edit, noun) {
+    $(sel).addEventListener('click', async e => {
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      const i = +b.closest('[data-i]').dataset.i;
+      const a = S.content[key];
+      const p = a[i];
+      switch (b.dataset.act) {
+        case 'up': if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; break;
+        case 'down': if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; break;
+        case 'toggle': if (p.hidden) delete p.hidden; else p.hidden = true; break;
+        case 'edit': edit(p); return;
+        case 'del':
+          if (!await ask(`Excluir ${noun}?`, `“${p.t || 'Sem título'}” será removido do site.`, { ok: 'Excluir', danger: true })) return;
+          a.splice(i, 1);
+          toast('Excluído.');
+          break;
+        default: return;
+      }
+      render(); renderCats(); changed();
+    });
+    sortable($(sel), () => S.content[key], render);
+  }
+  bindItemList('#projList', 'projects', () => renderProjects(), p => editProject(p, false), 'projeto');
 
   function cleanProject(p) {
     ['h', 'thumb', 'file', 'th', 'yt', 'id', 'c'].forEach(k => { if (p[k] === '' || p[k] == null) delete p[k]; });
     if (!p.hidden) delete p.hidden;
     if (p.ar && Math.abs(p.ar - 16 / 9) < .02) delete p.ar;
-    return p;
+    return cleanExtras(p);
   }
 
   function editProject(orig, isNew) {
@@ -976,13 +1082,24 @@
       bodyEl.append(
         fText(p, 'd', 'Duração (segundos)', { type: 'number', on: noop, hint: 'aparece como timecode no card' }),
         thumbField,
+        ...extrasFields(p),
         el('hr', 'sep'),
         fToggle(p, 'hidden', 'Ocultar do site (sem excluir)', { on: noop }),
       );
     }, {
       saveLabel: isNew ? 'Adicionar ao site' : 'Salvar',
       onSave: () => {
-        if (!p.id && !p.yt && !p.file) { toast('Coloque um link de vídeo ou envie um arquivo.', true); return false; }
+        const hasVideo = p.id || p.yt || p.file;
+        const hasLink = p.link && String(p.link.url || '').trim();
+        if (!hasVideo && !hasLink && !imagesOf(p).length && !pairsOf(p).length) {
+          toast('Coloque um link (Vimeo, YouTube ou outro site) ou envie um vídeo.', true);
+          return false;
+        }
+        if (!hasVideo && !p.thumb && !imagesOf(p).length && !pairsOf(p).length) {
+          toast('Sem vídeo, o card precisa de uma capa — envie uma imagem em “Capa”.', true);
+          return false;
+        }
+        if (incompletePairs(p)) toast('Um antes e depois ficou sem uma das imagens e não foi salvo.', true);
         if (!String(p.t || '').trim()) p.t = 'Sem título';
         p.y = parseInt(p.y, 10) || '';
         p.d = parseInt(p.d, 10) || 0;
@@ -1013,7 +1130,14 @@
     e.preventDefault();
     const url = $('#addUrl').value;
     const v = parseVideoUrl(url);
-    if (!v) return toast('Link não reconhecido. Use um link do Vimeo ou do YouTube.', true);
+    if (!v) {
+      // outro site (Behance, Instagram, Drive…): vira um card que abre o link
+      if (!/^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(url.trim())) return toast('Link não reconhecido. Confira o endereço.', true);
+      $('#addUrl').value = '';
+      editProject({ t: '', c: '', y: new Date().getFullYear(), cat: (S.content.categories[0] || {}).key || '', link: { label: 'Ver projeto', url: normUrl(url) } }, true);
+      toast('Link de outro site: envie uma capa para o card.');
+      return;
+    }
     if ((v.id && S.content.projects.some(p => p.id === v.id)) || (v.yt && S.content.projects.some(p => p.yt === v.yt))) {
       return toast('Esse vídeo já está na lista.', true);
     }
@@ -1032,7 +1156,6 @@
   // adicionar vídeo do computador
   async function addVideoFile(f) {
     if (!f || !f.type.startsWith('video/')) return toast('Escolha um arquivo de vídeo (MP4 de preferência).', true);
-    if (S.local) return toast(LOCAL_UPLOAD, true);
     if (f.type === 'video/quicktime') toast('Arquivos .mov podem não tocar em todos os navegadores — MP4 é mais seguro.');
     const zone = $('#videoDrop');
     zone.classList.add('is-busy');
@@ -1064,14 +1187,34 @@
   }
   dropzone($('#videoDrop'), files => addVideoFile(files[0]));
 
-  /* ══════════ CATEGORIAS ══════════ */
-  function renderCats() {
-    const box = $('#catsList');
-    const cats = S.content.categories;
+  /* ══════════ CATEGORIAS (vídeos e design) ══════════ */
+  const CAT_LISTS = [
+    { cats: 'categories', items: 'projects', box: '#catsList', redraw: () => renderProjects() },
+    { cats: 'designCategories', items: 'designs', box: '#desCatsList', redraw: () => renderDesigns() },
+  ];
+  function renderCats() { CAT_LISTS.forEach(renderCatList); }
+  function addCat(cfg) {
+    const cats = S.content[cfg.cats];
+    let k = 'categoria', n = 2;
+    while (cats.some(c => c.key === k)) k = `categoria-${n++}`;
+    cats.push({ key: k, label: 'Nova categoria' });
+    renderCatList(cfg); changed();
+    const ins = $$(`${cfg.box} .in`);
+    if (ins.length) { ins[ins.length - 1].focus(); ins[ins.length - 1].select(); }
+  }
+  $('#catAdd').addEventListener('click', () => addCat(CAT_LISTS[0]));
+  $('#desCatAdd').addEventListener('click', () => addCat(CAT_LISTS[1]));
+
+  function renderCatList(cfg) {
+    const box = $(cfg.box);
+    const cats = S.content[cfg.cats];
+    const items = S.content[cfg.items];
+    const renderProjects = cfg.redraw;
+    const renderCats = () => renderCatList(cfg);
     box.innerHTML = '';
-    if (!cats.length) box.append(el('div', 'empty', 'Nenhuma categoria — todos os projetos aparecem sem filtro.'));
+    if (!cats.length) box.append(el('div', 'empty', 'Nenhuma categoria — todos os trabalhos aparecem sem filtro.'));
     cats.forEach((c, i) => {
-      const n = S.content.projects.filter(p => p.cat === c.key).length;
+      const n = items.filter(p => p.cat === c.key).length;
       const row = el('div', 'li li--compact');
       const bodyEl = el('div', 'li__body');
       bodyEl.style.gridTemplateColumns = 'minmax(0,1fr) auto';
@@ -1091,7 +1234,7 @@
         if (!b) return;
         if (b.dataset.m === 'x') {
           if (n && !await ask('Excluir categoria?', `Os ${n} projeto(s) de “${c.label}” ficam sem categoria (continuam aparecendo em “${S.content.labels.all || 'Todos'}”).`, { ok: 'Excluir', danger: true })) return;
-          S.content.projects.forEach(p => { if (p.cat === c.key) p.cat = ''; });
+          items.forEach(p => { if (p.cat === c.key) p.cat = ''; });
           cats.splice(i, 1);
         } else {
           const j = i + +b.dataset.m;
@@ -1103,15 +1246,135 @@
       box.append(row);
     });
   }
-  $('#catAdd').addEventListener('click', () => {
-    const cats = S.content.categories;
-    let k = 'categoria', n = 2;
-    while (cats.some(c => c.key === k)) k = `categoria-${n++}`;
-    cats.push({ key: k, label: 'Nova categoria' });
-    renderCats(); changed();
-    const ins = $$('#catsList .in');
-    if (ins.length) { ins[ins.length - 1].focus(); ins[ins.length - 1].select(); }
-  });
+  /* ══════════ DESIGN, FOTOS & 3D ══════════ */
+  function designThumb(d) {
+    const src = d.thumb || imagesOf(d)[0] || (pairsOf(d)[0] || {}).after;
+    return src ? `<img src="${esc(assetUrl(src))}" alt="" loading="lazy">` : `<span class="proj__icon">${d.model ? '🧊' : d.doc ? '📄' : '🖼'}</span>`;
+  }
+
+  function renderDesigns() {
+    const list = $('#desList');
+    const a = S.content.designs;
+    $('#desTotal').textContent = a.filter(d => !d.hidden).length;
+    if (!a.length) {
+      list.innerHTML = '<div class="empty">Nenhum trabalho ainda. Clique em “Novo trabalho” para adicionar fotos, antes e depois, um modelo 3D ou um PDF.</div>';
+      return;
+    }
+    list.innerHTML = a.map((d, i) => `<div class="proj${d.hidden ? ' is-off' : ''}" data-i="${i}">
+        <span class="proj__handle" title="Arraste para reordenar">⠿</span>
+        <div class="proj__thumb">${designThumb(d)}<b>${pad(i + 1)}</b></div>
+        <div class="proj__info" data-act="edit" style="cursor:pointer">
+          <span class="proj__t">${esc(d.t || 'Sem título')}</span>
+          <div class="proj__m">
+            <span class="chip chip--accent">${esc(catLabel(d.cat, 'designCategories'))}</span>${extraChips(d)}
+            ${d.hidden ? '<span class="chip chip--warn">oculto</span>' : ''}
+            ${d.y ? `<span>${esc(d.y)}</span>` : ''}${d.c ? `<span>${esc(d.c)}</span>` : ''}
+          </div>
+        </div>
+        <div class="proj__actions">
+          <button type="button" class="icon-btn" data-act="up" title="Subir" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="icon-btn" data-act="down" title="Descer" ${i === a.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="icon-btn" data-act="toggle" title="${d.hidden ? 'Mostrar no site' : 'Ocultar do site'}">${d.hidden ? '◌' : '◉'}</button>
+          <button type="button" class="icon-btn" data-act="edit" title="Editar">✎</button>
+          <button type="button" class="icon-btn icon-btn--danger" data-act="del" title="Excluir">✕</button>
+        </div>
+      </div>`).join('');
+  }
+  bindItemList('#desList', 'designs', () => renderDesigns(), d => editDesign(d, false), 'trabalho');
+
+  // gera a capa de um modelo 3D (foto do próprio modelo)
+  let mvLoad = null;
+  async function modelPoster(url) {
+    try { await (mvLoad ||= import(MODEL_VIEWER)); } catch (e) { mvLoad = null; throw e; }
+    const holder = el('div');
+    holder.style.cssText = 'position:fixed;right:0;bottom:0;width:800px;height:500px;opacity:.01;pointer-events:none;z-index:-1';
+    const mv = document.createElement('model-viewer');
+    mv.style.cssText = 'width:100%;height:100%';
+    mv.setAttribute('shadow-intensity', '1');
+    holder.append(mv);
+    document.body.append(holder);
+    try {
+      const loaded = new Promise((res, rej) => {
+        mv.addEventListener('load', res, { once: true });
+        mv.addEventListener('error', () => rej(new Error('modelo inválido')), { once: true });
+        setTimeout(() => rej(new Error('tempo esgotado')), 30000);
+      });
+      mv.src = url;
+      await loaded;
+      await new Promise(r => setTimeout(r, 800));
+      const blob = await mv.toBlob({ mimeType: 'image/webp', qualityArgument: 0.9 });
+      if (!blob || !blob.size) throw new Error('capa vazia');
+      return blob;
+    } finally {
+      holder.remove();
+    }
+  }
+
+  function editDesign(orig, isNew) {
+    const d = clone(orig);
+    const catOpts = [{ v: '', l: '— sem categoria —' }, ...S.content.designCategories.map(c => ({ v: c.key, l: c.label }))];
+    let thumbField;
+    openSheet(isNew ? 'Novo trabalho' : 'Editar trabalho', bodyEl => {
+      thumbField = fImage(d, 'thumb', 'Capa', { on: noop, hint: 'opcional — sem capa, usa a primeira foto' });
+      bodyEl.append(
+        fText(d, 't', 'Título', { on: noop, ph: 'Ex.: Identidade visual Selfit' }),
+        fText(d, 'c', 'Cliente / descrição curta', { on: noop, ph: 'Ex.: Selfit · Branding' }),
+        grid2(fText(d, 'y', 'Ano', { type: 'number', on: noop }), fSelect(d, 'cat', 'Categoria', catOpts, { on: noop })),
+        thumbField,
+        ...extrasFields(d),
+        el('h3', 'group-t mono', 'Modelo 3D'),
+        fImage(d, 'model', 'Arquivo 3D', {
+          accept: 'model',
+          hint: 'GLB (arquivo único). No Blender ou Cinema 4D: exportar como glTF Binary (.glb)',
+          on: async v => {
+            if (!v || d.thumb) return;
+            toast('Gerando a capa do 3D…', false, true);
+            try {
+              const blob = await modelPoster(assetUrl(v));
+              d.thumb = await uploadFile(new File([blob], 'capa-3d.webp', { type: 'image/webp' }), { quiet: true });
+              thumbField._redraw();
+              toast('Capa do 3D gerada.');
+            } catch (e) {
+              toast('Não consegui gerar a capa do 3D — envie uma imagem de capa.', true);
+            }
+          },
+        }),
+        el('h3', 'group-t mono', 'PDF'),
+        fImage(d, 'doc', 'Arquivo PDF', { accept: 'pdf', on: noop, hint: 'apresentação, catálogo, case completo…' }),
+        el('hr', 'sep'),
+        fToggle(d, 'hidden', 'Ocultar do site (sem excluir)', { on: noop }),
+      );
+    }, {
+      saveLabel: isNew ? 'Adicionar ao site' : 'Salvar',
+      onSave: () => {
+        if (!imagesOf(d).length && !pairsOf(d).length && !d.model && !d.doc && !d.thumb) {
+          toast('Adicione pelo menos uma foto, um antes e depois, um modelo 3D ou um PDF.', true);
+          return false;
+        }
+        if (incompletePairs(d)) toast('Um antes e depois ficou sem uma das imagens e não foi salvo.', true);
+        if (!String(d.t || '').trim()) d.t = 'Sem título';
+        d.y = parseInt(d.y, 10) || '';
+        cleanExtras(d);
+        if (!d.hidden) delete d.hidden;
+        if (isNew) S.content.designs.unshift(d);
+        else { Object.keys(orig).forEach(k => delete orig[k]); Object.assign(orig, d); }
+        renderDesigns(); renderCats(); changed();
+        toast(isNew ? 'Trabalho adicionado. Clique em Publicar para ir ao ar.' : 'Trabalho atualizado.');
+      },
+      onDelete: isNew ? null : async () => {
+        if (!await ask('Excluir trabalho?', `“${orig.t || 'Sem título'}” será removido do site.`, { ok: 'Excluir', danger: true })) return false;
+        const a = S.content.designs;
+        a.splice(a.indexOf(orig), 1);
+        renderDesigns(); renderCats(); changed();
+        toast('Trabalho excluído.');
+        return true;
+      },
+    });
+  }
+  $('#desAdd').addEventListener('click', () => editDesign({
+    t: '', c: '', y: new Date().getFullYear(), cat: (S.content.designCategories[0] || {}).key || '',
+    images: [], compare: [], link: { label: '', url: '' },
+  }, true));
 
   /* ══════════ SEÇÕES EXTRAS ══════════ */
   function renderSections() {
@@ -1210,21 +1473,25 @@
   /* ══════════ TEXTOS ══════════ */
   function showreelField() {
     const C = S.content;
-    const tmp = { u: C.showreel.id ? videoLink(C.showreel) : '' };
+    const tmp = { u: C.showreel.id || C.showreel.yt ? videoLink(C.showreel) : '' };
     const box = el('div');
     box.append(
-      fText(tmp, 'u', 'Link do showreel no Vimeo', {
-        ph: 'https://vimeo.com/…',
+      fText(tmp, 'u', 'Link do showreel (Vimeo ou YouTube)', {
+        ph: 'https://vimeo.com/… ou https://youtu.be/…',
         on: v => {
           const r = parseVideoUrl(v);
-          if (r && r.id) { C.showreel.id = r.id; if (r.h) C.showreel.h = r.h; else delete C.showreel.h; changed(); }
-          else if (!v.trim()) { C.showreel.id = ''; delete C.showreel.h; changed(); }
+          if (r) {
+            C.showreel.id = r.id || '';
+            if (r.h) C.showreel.h = r.h; else delete C.showreel.h;
+            if (r.yt) C.showreel.yt = r.yt; else delete C.showreel.yt;
+            changed();
+          } else if (!v.trim()) { C.showreel.id = ''; delete C.showreel.h; delete C.showreel.yt; changed(); }
         },
       }),
       el('div', 'or', 'ou'),
       fImage(C.showreel, 'file', 'Arquivo de vídeo do computador', {
         accept: 'video', hint: 'usado só se não houver link',
-        on: v => { if (v) { C.showreel.id = ''; delete C.showreel.h; setTimeout(renderTexts, 0); } changed(); },
+        on: v => { if (v) { C.showreel.id = ''; delete C.showreel.h; delete C.showreel.yt; setTimeout(renderTexts, 0); } changed(); },
       }),
     );
     return box;
@@ -1269,6 +1536,17 @@
     ));
     P.append(c);
 
+    c = card('Seção Design, fotos e 3D', 'Fica entre os vídeos e o “Sobre” e só aparece quando houver trabalho publicado.');
+    c.append(
+      grid2(
+        fText(C, 'labels.designs', 'Título', { multi: true, rows: 2, hint: 'Enter = quebra de linha' }),
+        fText(C, 'labels.navDesign', 'Link no menu'),
+      ),
+      grid2(fText(C, 'labels.gallery', 'Título da galeria'), fText(C, 'labels.compare', 'Título do antes e depois')),
+      grid3(fText(C, 'labels.before', 'Rótulo “antes”'), fText(C, 'labels.after', 'Rótulo “depois”'), fText(C, 'labels.model', 'Título do 3D')),
+    );
+    P.append(c);
+
     c = card('Sobre');
     c.append(
       fText(C, 'labels.about', 'Título da seção'),
@@ -1304,7 +1582,12 @@
         fText(C, 'contact.instagram', 'Instagram', { hint: 'usuário ou link' }),
         fText(C, 'contact.vimeo', 'Vimeo', { hint: 'usuário ou link' }),
       ),
-      fObjList(C, 'contact.links', 'Outros links (LinkedIn, Behance, WhatsApp…)', [
+      grid2(
+        fText(C, 'contact.youtube', 'Canal do YouTube', { hint: 'link do canal ou @usuário', ph: 'https://www.youtube.com/@seucanal' }),
+        fText(C, 'contact.whatsapp', 'WhatsApp', { hint: 'só o número, com DDD e país', ph: '55 48 99999-9999' }),
+      ),
+      el('p', 'hint', 'Todas as redes aparecem no contato, no rodapé e no menu do celular, com o ícone certo escolhido automaticamente pelo link.'),
+      fObjList(C, 'contact.links', 'Outros links (LinkedIn, Behance, TikTok, e-mail…) — o ícone vem sozinho', [
         { k: 'label', l: 'Nome', ph: 'LinkedIn' },
         { k: 'handle', l: 'Texto pequeno', ph: '/in/seu-nome ↗' },
         { k: 'url', l: 'Link', ph: 'https://…' },
@@ -1434,9 +1717,9 @@
     if (!grid || !S.content) return;
     const used = usedPaths(S.content);
     const items = S.media;
-    grid.innerHTML = items.length ? '' : `<div class="empty" style="grid-column:1/-1">${S.local ? LOCAL_UPLOAD : 'Nenhum arquivo enviado ainda.'}</div>`;
+    grid.innerHTML = items.length ? '' : '<div class="empty" style="grid-column:1/-1">Nenhum arquivo enviado ainda.</div>';
     items.forEach(m => {
-      const it = el('div', 'mi' + (used.has(m.url) ? ' is-used' : ''), `
+      const it = el('div', 'mi' + (used.has(m.path) ? ' is-used' : ''), `
         <div class="mi__prev">${prevHtml(m)}</div>
         <div class="mi__info"><span class="mi__n" title="${esc(m.name)}">${esc(m.name)}</span>
           <span class="mi__s">${fmtSize(m.size || 0)}</span></div>
@@ -1445,15 +1728,16 @@
           <button type="button" class="icon-btn icon-btn--danger" title="Excluir">✕</button>
         </div>`);
       $('button', it).addEventListener('click', async () => {
-        const inUse = used.has(m.url);
+        const inUse = used.has(m.path);
         const ok = await ask('Excluir arquivo?', inUse
           ? `“${m.name}” está sendo usado no site. Se excluir, os lugares que usam ficam sem essa imagem/vídeo — publique em seguida.`
           : `“${m.name}” será apagado.`, { ok: 'Excluir', danger: true });
         if (!ok) return;
         try {
-          await api('media?url=' + encodeURIComponent(m.url), { method: 'DELETE' });
-          S.media = S.media.filter(x => x.url !== m.url);
-          if (inUse) { removeRefs(S.content, m.url); renderAll(); changed(); toast('Arquivo excluído. Clique em Publicar para atualizar o site.'); }
+          if (m.pending) { URL.revokeObjectURL(m.url); S.pending.delete(m.path); }
+          else await api('media?url=' + encodeURIComponent(m.url), { method: 'DELETE' });
+          S.media = S.media.filter(x => x.path !== m.path);
+          if (inUse) { removeRefs(S.content, m.path); renderAll(); changed(); toast('Arquivo excluído. Clique em Publicar para atualizar o site.'); }
           else { renderMedia(); toast('Arquivo excluído.'); }
         } catch (e) {
           toast('Não consegui excluir: ' + friendly(e), true);
@@ -1465,7 +1749,6 @@
     $('#mediaInfo').textContent = items.length ? `${items.length} arquivo(s) · ${fmtSize(total)}` : '';
   }
   dropzone($('#mediaDrop'), async files => {
-    if (S.local) return toast(LOCAL_UPLOAD, true);
     const zone = $('#mediaDrop');
     zone.classList.add('is-busy');
     let n = 0;
@@ -1490,8 +1773,13 @@
   async function publish() {
     if (S.local) {
       download(new Blob([JSON.stringify(S.content, null, 2) + '\n'], { type: 'application/json' }), 'content.json');
+      const used = usedPaths(S.content);
+      const files = [...S.pending].filter(([p]) => used.has(p));
+      files.forEach(([p, v], i) => setTimeout(() => download(v.file, p.split('/').pop()), 450 * (i + 1)));
       S.dirty = false; clearDraft(); setStatus();
-      return toast('content.json baixado.');
+      return toast(files.length
+        ? `Baixado: content.json (raiz do site) e ${files.length} arquivo(s) para a pasta uploads/ do site.`
+        : 'content.json baixado — coloque na raiz do site.');
     }
     if (!S.dirty) return toast('Nada para publicar.');
     const btn = $('#publishBtn');
@@ -1518,7 +1806,7 @@
 
   $('#publishBtn').addEventListener('click', publish);
   $('#previewBtn').addEventListener('click', openPreview);
-  addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+  addEventListener('beforeunload', e => { if (S.dirty || S.pending.size) { e.preventDefault(); e.returnValue = ''; } });
   // Ctrl/Cmd + S publica
   addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && S.content) { e.preventDefault(); publish(); }

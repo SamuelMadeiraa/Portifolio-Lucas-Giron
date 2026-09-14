@@ -26,7 +26,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif', '.ico': 'image/x-icon',
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.pdf': 'application/pdf',
-  '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
+  '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
 };
 
 function send(res, code, text) {
@@ -141,7 +141,10 @@ const server = http.createServer(async (req, res) => {
     // ── arquivos enviados pelo painel ──
     if (p.startsWith('/uploads/')) {
       const name = p.slice('/uploads/'.length);
-      if (SAFE_NAME.test(name) && await serveFile(req, res, path.join(DATA, 'uploads', name), { cacheControl: 'public, max-age=31536000, immutable' })) return;
+      const cache = { cacheControl: 'public, max-age=31536000, immutable' };
+      // primeiro os enviados pelo painel (volume de dados); depois a pasta uploads/ do projeto (modo de teste)
+      if (SAFE_NAME.test(name) && (await serveFile(req, res, path.join(DATA, 'uploads', name), cache)
+        || await serveFile(req, res, path.join(ROOT, 'uploads', name), cache))) return;
       return send(res, 404, 'Not found');
     }
 

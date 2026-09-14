@@ -18,7 +18,8 @@
     "ticker": true,
     "about": true,
     "clients": true,
-    "onair": true
+    "onair": true,
+    "designs": true
   },
   "labels": {
     "navWorks": "Trabalhos",
@@ -31,7 +32,14 @@
     "tools": "Ferramentas",
     "services": "Serviços",
     "clients": "No ar para",
-    "showreel": "Ver showreel"
+    "showreel": "Ver showreel",
+    "navDesign": "Design",
+    "designs": "Design\n& 3D",
+    "gallery": "Galeria",
+    "compare": "Antes e depois",
+    "before": "Antes",
+    "after": "Depois",
+    "model": "Modelo 3D"
   },
   "showreel": {
     "id": "535644122",
@@ -49,6 +57,12 @@
     { "key": "motion", "label": "Motion" },
     { "key": "filme", "label": "Filme" }
   ],
+  "designCategories": [
+    { "key": "design", "label": "Design gráfico" },
+    { "key": "foto", "label": "Fotografia" },
+    { "key": "3d", "label": "3D" }
+  ],
+  "designs": [],
   "about": {
     "big": "Sou **Lucas Giron**, motion director em Florianópolis. Trabalho na fronteira entre design gráfico e cinema: pego uma marca, um conceito ou um jogo de basquete e transformo em *movimento*.",
     "paragraphs": [
@@ -79,6 +93,8 @@
     "email": "email@exemplo.com",
     "instagram": "lucasgiron.aep",
     "vimeo": "gironlucas",
+    "youtube": "",
+    "whatsapp": "",
     "links": []
   },
   "projects": [

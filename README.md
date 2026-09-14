@@ -133,9 +133,10 @@ sudo docker run --rm -v portfolio_dados:/data -v "$PWD":/backup alpine sh -c "cd
 
 O painel permite:
 
-- **Projetos** — adicionar por link do Vimeo/YouTube ou vídeo do computador, editar, excluir, ocultar, reordenar; criar categorias (filtros).
+- **Projetos** — adicionar por link do Vimeo/YouTube (vídeo, Shorts, live), link de outro site (Behance, Instagram, Drive… com capa) ou vídeo do computador; editar, excluir, ocultar, reordenar; trocar capas; criar categorias (filtros). Cada projeto pode ter **descrição, galeria de fotos e antes e depois**.
+- **Design** — seção própria para trabalhos que não são vídeo (fica entre os vídeos e o “Sobre”): galeria de fotos, antes e depois com barra de arrastar, **modelo 3D** girável (GLB — a capa é gerada sozinha) e PDF.
 - **Seções** — criar seções novas além do "Sobre", com texto, imagem, galeria e botão.
-- **Textos** — todos os textos do site, foto do "Sobre", números, ferramentas, serviços, clientes, contato e links.
+- **Textos** — todos os textos do site, foto do "Sobre", números, ferramentas, serviços, clientes, showreel (Vimeo, YouTube ou arquivo), contato e redes (Instagram, Vimeo, canal do YouTube, WhatsApp e outros links). As redes aparecem no contato, no rodapé e no menu do celular com **ícone automático** pelo endereço.
 - **Visual** — cores (destaque, fundo, texto), textura, ligar/desligar partes do site.
 - **Mídia** — enviar e excluir arquivos.
 

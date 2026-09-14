@@ -58,6 +58,7 @@
   </a>
   <nav class="nav__menu">
     <a href="#trabalhos" class="nav__link mono" data-scramble data-c="labels.navWorks">TRABALHOS</a>
+    <a href="#design"    class="nav__link mono" data-scramble data-c="labels.navDesign" hidden>DESIGN</a>
     <a href="#sobre"     class="nav__link mono" data-scramble data-c="labels.navAbout">SOBRE</a>
     <a href="#contato"   class="nav__link mono" data-scramble data-c="labels.navContact">CONTATO</a>
   </nav>
@@ -70,11 +71,13 @@
 <!-- ══ menu mobile ══ -->
 <div class="drawer" id="drawer">
   <a href="#trabalhos" class="drawer__link" data-c="labels.navWorks">Trabalhos</a>
+  <a href="#design"    class="drawer__link" data-c="labels.navDesign" hidden>Design</a>
   <a href="#sobre"     class="drawer__link" data-c="labels.navAbout">Sobre</a>
   <a href="#contato"   class="drawer__link" data-c="labels.navContact">Contato</a>
   <div class="drawer__foot mono">
     <a href="https://vimeo.com/gironlucas" target="_blank" rel="noopener" data-link="vimeo">VIMEO</a>
     <a href="https://www.instagram.com/lucasgiron.aep/" target="_blank" rel="noopener" data-link="instagram">INSTAGRAM</a>
+    <a href="#" target="_blank" rel="noopener" data-link="youtube" hidden>YOUTUBE</a>
   </div>
 </div>
 
@@ -172,6 +175,23 @@ SELECIONADOS</h2>
 
   <div class="grid" id="grid"></div>
   <noscript><p class="mono muted" style="padding:0 var(--pad)">Ative o JavaScript para ver o portfólio completo, ou acesse <a href="https://vimeo.com/gironlucas">vimeo.com/gironlucas</a>.</p></noscript>
+</section>
+
+<!-- ══════════ DESIGN, FOTOS & 3D (painel → aba Design) ══════════ -->
+<section class="works works--design" id="design" data-show="designs" hidden>
+  <div class="sec-head">
+    <div class="sec-head__l">
+      <span class="sec-num mono" id="designNum">02</span>
+      <h2 class="sec-title" data-scramble-in data-c="labels.designs">DESIGN
+&amp; 3D</h2>
+    </div>
+    <div class="sec-head__r">
+      <p class="mono muted" id="designLine">Clique para ver.</p>
+      <div class="filters" id="designFilters"></div>
+    </div>
+  </div>
+
+  <div class="grid" id="designGrid"></div>
 </section>
 
 <!-- ══════════ SOBRE ══════════ -->
@@ -302,6 +322,9 @@ SELECIONADOS</h2>
     <a href="https://vimeo.com/gironlucas" target="_blank" rel="noopener" class="clink" data-magnet data-link="vimeo">
       <span class="clink__t">Vimeo</span><span class="clink__h mono" data-handle="vimeo">/gironlucas ↗</span>
     </a>
+    <a href="#" target="_blank" rel="noopener" class="clink" data-magnet data-link="youtube" hidden>
+      <span class="clink__t">YouTube</span><span class="clink__h mono" data-handle="youtube">Canal ↗</span>
+    </a>
   </div>
 </section>
 
@@ -309,6 +332,7 @@ SELECIONADOS</h2>
 
 <footer class="foot mono">
   <span>© <span id="year">2026</span> <span data-c="site.name">LUCAS GIRON</span></span>
+  <nav class="foot__social" id="footSocial" aria-label="Redes sociais" hidden></nav>
   <span class="muted" data-c="site.footer">FLORIANÓPOLIS · SANTA CATARINA · BRASIL</span>
   <a href="#inicio" class="foot__top">VOLTAR AO TOPO ↑</a>
 </footer>
@@ -320,6 +344,20 @@ SELECIONADOS</h2>
     <div class="modal__head mono"><span id="modalTitle"></span><span id="modalMeta" class="muted"></span></div>
     <div class="modal__frame" id="modalFrame"></div>
   </div>
+</div>
+
+<!-- ══ projeto aberto: vídeo, galeria, antes e depois, 3D, PDF ══ -->
+<div class="case" id="case" role="dialog" aria-modal="true" aria-labelledby="caseTitle">
+  <button class="modal__close case__close" id="caseClose" aria-label="Fechar"><span></span><span></span></button>
+  <div class="case__inner" id="caseInner"></div>
+</div>
+
+<!-- ══ galeria ampliada ══ -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Imagem ampliada">
+  <button class="modal__close lightbox__close" id="lbClose" aria-label="Fechar"><span></span><span></span></button>
+  <button class="lightbox__nav lightbox__nav--prev" id="lbPrev" aria-label="Imagem anterior">←</button>
+  <figure class="lightbox__stage"><img id="lbImg" alt=""><figcaption class="mono" id="lbCount"></figcaption></figure>
+  <button class="lightbox__nav lightbox__nav--next" id="lbNext" aria-label="Próxima imagem">→</button>
 </div>
 
 <script src="assets/js/main.js"></script>

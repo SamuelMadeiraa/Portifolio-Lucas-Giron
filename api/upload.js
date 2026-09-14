@@ -12,6 +12,7 @@ const TYPES = [
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/svg+xml',
   'video/mp4', 'video/webm', 'video/quicktime',
   'application/pdf',
+  'model/gltf-binary', 'model/gltf+json',
 ];
 
 export default async function handler(req, res) {

@@ -43,12 +43,13 @@
 
 <!-- ══════════ PAINEL ══════════ -->
 <div class="app" id="app" hidden>
-  <div class="localbar" id="localBar" hidden>Modo de teste: nada é salvo no site. “Baixar content.json” gera o arquivo com as alterações. Envio de fotos e vídeos só funciona na Vercel.</div>
+  <div class="localbar" id="localBar" hidden>Modo de teste: nada é salvo no site. “Baixar content.json” baixa o conteúdo e as imagens que você adicionou — coloque o content.json na raiz do site e as imagens na pasta uploads/.</div>
   <div class="localbar" id="storageBar" hidden>O armazenamento não está ligado: no painel da Vercel, abra o projeto → <b>Storage</b> → <b>Create → Blob</b> e conecte ao projeto. Depois faça um novo deploy.</div>
   <header class="bar">
     <div class="brand"><span class="brand__mark">LG</span><span class="mono" id="repoLabel">Painel</span></div>
     <nav class="tabs" role="tablist">
       <button class="tab is-on" data-tab="projetos" role="tab">Projetos</button>
+      <button class="tab" data-tab="design" role="tab">Design</button>
       <button class="tab" data-tab="secoes" role="tab">Seções</button>
       <button class="tab" data-tab="textos" role="tab">Textos</button>
       <button class="tab" data-tab="visual" role="tab">Visual</button>
@@ -68,9 +69,9 @@
     <section class="panel" data-panel="projetos">
       <div class="card">
         <h2>Adicionar projeto</h2>
-        <p class="hint">Cole o link do vídeo no <b>Vimeo</b> ou no <b>YouTube</b> — título, duração e capa são puxados automaticamente.</p>
+        <p class="hint">Cole o link do vídeo no <b>Vimeo</b> ou no <b>YouTube</b> (vídeo, Shorts ou live) — título, duração e capa são puxados automaticamente. Link de <b>outro site</b> (Behance, Instagram, Drive…) vira um card que abre o link; aí é só enviar uma capa.</p>
         <form class="add" id="addForm">
-          <input class="in" id="addUrl" placeholder="https://vimeo.com/123456789" inputmode="url" required>
+          <input class="in" id="addUrl" placeholder="https://vimeo.com/… · https://youtu.be/… · outro link" inputmode="url" required>
           <button class="btn btn--primary" type="submit" id="addBtn">Adicionar</button>
         </form>
         <div class="or">ou envie um vídeo do computador</div>
@@ -95,6 +96,27 @@
         <p class="hint">Viram os filtros acima dos trabalhos. Categorias sem projeto não aparecem no site.</p>
         <div class="list" id="catsList"></div>
         <button class="btn btn--sm add-row" type="button" id="catAdd">+ Nova categoria</button>
+      </div>
+    </section>
+
+    <!-- ══ DESIGN, FOTOS & 3D ══ -->
+    <section class="panel" data-panel="design" hidden>
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h2>Design, fotos e 3D <span class="count" id="desTotal">0</span></h2>
+            <p class="hint">Trabalhos que não são vídeo: galeria de fotos, antes e depois, modelo 3D (GLB) e PDF. Ficam numa seção própria, logo depois dos vídeos e antes do “Sobre”.</p>
+          </div>
+          <button class="btn btn--primary" type="button" id="desAdd">+ Novo trabalho</button>
+        </div>
+        <div class="projs" id="desList"></div>
+      </div>
+
+      <div class="card">
+        <h2>Categorias desta seção</h2>
+        <p class="hint">Viram os filtros da seção de design. Categorias sem trabalho não aparecem no site.</p>
+        <div class="list" id="desCatsList"></div>
+        <button class="btn btn--sm add-row" type="button" id="desCatAdd">+ Nova categoria</button>
       </div>
     </section>
 
@@ -128,7 +150,7 @@
         <h2>Arquivos do site</h2>
         <p class="hint">Fotos, imagens e vídeos enviados. Imagens grandes são otimizadas automaticamente antes de subir.</p>
         <label class="drop" id="mediaDrop">
-          <input type="file" accept="image/*,video/*,application/pdf" multiple>
+          <input type="file" accept="image/*,video/*,application/pdf,.glb,.gltf" multiple>
           <span class="drop__ico">⬆</span>
           <span><b>Clique ou arraste arquivos aqui</b></span>
           <span class="hint">Depois é só escolher na “Biblioteca” de qualquer campo de imagem.</span>

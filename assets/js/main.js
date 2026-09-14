@@ -24,6 +24,8 @@
   const THUMBS_LOCAL = true; // tenta assets/thumbs/{id}.jpg primeiro (projetos do Vimeo)
   const CDN = 'https://i.vimeocdn.com/video/';
   let VCOLOR = 'FF3B00'; // cor do player do Vimeo (acompanha a cor de destaque)
+  // visualizador 3D (GLB/GLTF) — só é baixado quando alguém abre um projeto com modelo
+  const MODEL_VIEWER = 'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js';
 
   // arquivos ainda não publicados (pré-visualização do painel): caminho → blob URL
   let FILES = {};
@@ -34,11 +36,13 @@
   const DEFAULTS = {
     site: { name: 'Lucas Giron', role: 'Creative Motion Director', city: 'Florianópolis — BR', footer: 'Florianópolis · Santa Catarina · Brasil', description: '' },
     theme: { accent: '#FF3B00', bg: '#08080A', fg: '#F2EFE9', grain: true },
-    show: { loader: true, cursor: true, ticker: true, about: true, clients: true, onair: true },
+    show: { loader: true, cursor: true, ticker: true, about: true, clients: true, onair: true, designs: true },
     labels: {
       navWorks: 'Trabalhos', navAbout: 'Sobre', navContact: 'Contato', specialty: 'Especialidade',
       works: 'Trabalhos\nSelecionados', all: 'Todos', about: 'Sobre', tools: 'Ferramentas',
       services: 'Serviços', clients: 'No ar para', showreel: 'Ver showreel',
+      navDesign: 'Design', designs: 'Design\n& 3D', gallery: 'Galeria', compare: 'Antes e depois',
+      before: 'Antes', after: 'Depois', model: 'Modelo 3D',
     },
     showreel: { id: '535644122', title: 'Showreel 2024' },
     hero: {
@@ -53,6 +57,12 @@
       { key: 'motion', label: 'Motion' },
       { key: 'filme', label: 'Filme' },
     ],
+    designCategories: [
+      { key: 'design', label: 'Design gráfico' },
+      { key: 'foto', label: 'Fotografia' },
+      { key: '3d', label: '3D' },
+    ],
+    designs: [],
     about: {
       big: 'Sou **Lucas Giron**, motion director em Florianópolis. Trabalho na fronteira entre design gráfico e cinema: pego uma marca, um conceito ou um jogo de basquete e transformo em *movimento*.',
       paragraphs: [
@@ -76,7 +86,7 @@
     },
     sections: [],
     clients: ['NBA Brasil', 'Amazon Prime Video', 'ALESC', 'Rede Jesuíta', 'Madruga Filmes', 'Colégio Catarinense', 'CORE-SC', 'ABDEH', 'Selfit', 'Academia Prime', 'Escola Internacional'],
-    contact: { kicker: 'Tem um projeto para colocar no ar?', title1: 'Vamos', title2: 'Animar', email: 'email@exemplo.com', instagram: 'lucasgiron.aep', vimeo: 'gironlucas', links: [] },
+    contact: { kicker: 'Tem um projeto para colocar no ar?', title1: 'Vamos', title2: 'Animar', email: 'email@exemplo.com', instagram: 'lucasgiron.aep', vimeo: 'gironlucas', youtube: '', whatsapp: '', links: [] },
     projects: [
       { id: '764150238', t: 'NBA — Abertura Prime Video', c: 'Amazon Prime Video · Madruga Filmes', y: 2022, cat: 'broadcast', d: 18,  th: '1534707789-d89780118a4d3cc4f4ca03a62a11be48e8384c8039b769b61acd1f98c9781a46-d' },
       { id: '584999486', t: 'Dicionário NBA',             c: 'NBA Brasil',                          y: 2021, cat: 'broadcast', d: 34,  th: '1210644360-dc42defb0f364117bc455e18aaa46ae198844edfa4e652b5bd6e1396d5557fd1-d' },
@@ -240,8 +250,68 @@
     return { n, list };
   }
 
+  /* ══════════ PROJETOS COM EXTRAS (galeria, antes/depois, 3D, PDF) ══════════ */
+  const arr = v => (Array.isArray(v) ? v : []);
+  const imagesOf = p => arr(p.images).filter(Boolean);
+  const pairsOf = p => arr(p.compare).filter(c => c && c.before && c.after);
+  const hasExtras = p => imagesOf(p).length > 0 || pairsOf(p).length > 0 || Boolean(p.model || p.doc);
+  const isVideo = p => Boolean(p.id || p.yt || p.file);
+  const normUrl = u => { u = String(u || '').trim(); return !u ? '' : /^(https?:|mailto:|tel:)/i.test(u) ? u : 'https://' + u; };
+  const linkOf = p => normUrl(p && p.link && p.link.url);
+
+  /* ══════════ ÍCONES DAS REDES (escolhidos pelo endereço do link) ══════════ */
+  const ICONS = {
+    instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"/>',
+    youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor" stroke="none"/>',
+    vimeo: '<path d="M3 8.6c1.3-1.1 2.4-1.9 3.1-1.9 1.4 0 1.9 5.2 2.7 8 .6 2.2 1.3 3.3 2 3.3 1.3 0 4.4-4.1 6-8 .9-2.3.5-4.5-1.7-4.5-1 0-2 .4-2.7 1"/>',
+    whatsapp: '<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9.2 8.6c.2-.5.6-.5.9-.4l.8 1.8c.1.3 0 .5-.2.7l-.5.5c.5 1 1.3 1.8 2.3 2.3l.5-.5c.2-.2.4-.3.7-.2l1.8.8c.1.3.1.7-.4.9-.9.6-2 .5-3-.1a9 9 0 0 1-3.2-3.2c-.6-1-.7-2.1-.1-3z" fill="currentColor" stroke="none"/>',
+    linkedin: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 10.5V17M8 7.4v.1M12 17v-3.8a2 2 0 0 1 4 0V17M12 10.5V17"/>',
+    behance: '<path d="M3 7h4.5a2.5 2.5 0 0 1 0 5H3zM3 12h5a2.5 2.5 0 0 1 0 5H3z"/><path d="M14 13.5h7a3.5 3.5 0 1 0-1 2.6M15 7.5h4"/>',
+    tiktok: '<path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.5 2.6 2.3 4.3 5 4.5"/>',
+    x: '<path d="M4 4l16 16M20 4L4 20"/>',
+    facebook: '<path d="M14 21v-8h3l.5-3.5H14V7.8c0-1 .4-1.8 1.9-1.8h1.8V3.2A22 22 0 0 0 15 3c-2.6 0-4.3 1.6-4.3 4.4v2.1H8V13h2.7v8"/>',
+    github: '<path d="M9 19c-4 1.3-4-2-6-2.5M15 21v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/>',
+    dribbble: '<circle cx="12" cy="12" r="9"/><path d="M8.6 3.7c3 3.8 5.5 9.5 6.4 16.6M3.2 10.7c5 .3 10-1.2 14-5M6 18.5c3-4 7.8-5.6 14.6-4.6"/>',
+    spotify: '<circle cx="12" cy="12" r="9"/><path d="M7.5 9.5c3-1 6.5-.7 9 .8M8 12.5c2.5-.7 5.2-.4 7.3.8M8.6 15.3c1.9-.5 3.8-.3 5.4.6"/>',
+    telegram: '<path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/><path d="M9 13l12-9"/>',
+    pinterest: '<circle cx="12" cy="12" r="9"/><path d="M11 8.5c2.5-.8 5 .5 5 3 0 2.3-1.6 3.8-3.4 3.3-.8-.2-1.2-.9-1.1-1.6M11.5 11l-2.5 9"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+    phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  };
+  const host = '\\/\\/([\\w-]+\\.)*';
+  const ICON_RULES = [
+    ['instagram', new RegExp(host + 'instagram\\.com', 'i')],
+    ['youtube', new RegExp(host + '(youtube\\.com|youtu\\.be)', 'i')],
+    ['vimeo', new RegExp(host + 'vimeo\\.com', 'i')],
+    ['whatsapp', new RegExp(host + '(wa\\.me|whatsapp\\.com)', 'i')],
+    ['linkedin', new RegExp(host + 'linkedin\\.com', 'i')],
+    ['behance', new RegExp(host + 'behance\\.net', 'i')],
+    ['tiktok', new RegExp(host + 'tiktok\\.com', 'i')],
+    ['x', new RegExp(host + '(twitter|x)\\.com', 'i')],
+    ['facebook', new RegExp(host + '(facebook\\.com|fb\\.com)', 'i')],
+    ['github', new RegExp(host + 'github\\.com', 'i')],
+    ['dribbble', new RegExp(host + 'dribbble\\.com', 'i')],
+    ['spotify', new RegExp(host + 'spotify\\.com', 'i')],
+    ['telegram', new RegExp(host + '(t\\.me|telegram\\.(me|org))', 'i')],
+    ['pinterest', new RegExp(host + 'pinterest\\.', 'i')],
+    ['mail', /^mailto:/i],
+    ['phone', /^tel:/i],
+  ];
+  const iconName = url => (ICON_RULES.find(([, re]) => re.test(url)) || ['link'])[0];
+  const iconSvg = url => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[iconName(url)]}</svg>`;
+  // aceita número de WhatsApp puro e e-mail sem "mailto:"
+  const socialUrl = u => {
+    u = String(u || '').trim();
+    const digits = u.replace(/[\s()+.-]/g, '');
+    if (/^\d{8,15}$/.test(digits)) return `https://wa.me/${digits}`;
+    if (/^[^\s@/]+@[^\s@/]+\.[a-z]{2,}$/i.test(u)) return 'mailto:' + u;
+    return normUrl(u);
+  };
+  const visibleDesigns = C => arr(C.designs).filter(p => p && !p.hidden && (hasExtras(p) || p.thumb));
+
   /* ══════════ TEXTOS / LISTAS DO content.json ══════════ */
-  function applyContent(C, P, accent) {
+  function applyContent(C, P, D, accent) {
     const S = C.site;
     const L = C.labels;
     const show = C.show || {};
@@ -275,10 +345,11 @@
 
     const sr = C.showreel || {};
     $$('[data-showreel]').forEach(b => {
-      b.hidden = !sr.id && !sr.file;
+      b.hidden = !sr.id && !sr.yt && !sr.file;
       b.dataset.video = sr.id || '';
       b.dataset.h = sr.h || '';
-      b.dataset.file = sr.id ? '' : asset(sr.file);
+      b.dataset.yt = sr.id ? '' : (sr.yt || '');
+      b.dataset.file = sr.id || sr.yt ? '' : asset(sr.file);
       b.dataset.title = sr.title || 'Showreel';
     });
 
@@ -288,10 +359,17 @@
       ? `Arquivo ${Math.min(...years)} — ${Math.max(...years)}. Clique para assistir.`
       : 'Clique para assistir.';
 
-    // filtros = categorias
-    const filters = $('#filters');
-    filters.innerHTML = `<button class="filter is-on mono" data-filter="all">${esc(L.all || 'Todos')} <sup></sup></button>` +
-      C.categories.filter(c => c && c.key).map(c => `<button class="filter mono" data-filter="${esc(c.key)}">${esc(c.label || c.key)} <sup></sup></button>`).join('');
+    // filtros = categorias (vídeos e design têm listas próprias)
+    const filterHtml = cats => `<button class="filter is-on mono" data-filter="all">${esc(L.all || 'Todos')} <sup></sup></button>` +
+      arr(cats).filter(c => c && c.key).map(c => `<button class="filter mono" data-filter="${esc(c.key)}">${esc(c.label || c.key)} <sup></sup></button>`).join('');
+    $('#filters').innerHTML = filterHtml(C.categories);
+    $('#designFilters').innerHTML = filterHtml(C.designCategories);
+
+    // seção de design só aparece se tiver trabalho publicado
+    const showDesign = show.designs !== false && D.length > 0;
+    $('#design').hidden = !showDesign;
+    $$('a[href="#design"]').forEach(a => { a.hidden = !showDesign; });
+    $('#designLine').textContent = `${D.length} ${D.length === 1 ? 'trabalho' : 'trabalhos'} · clique para ver.`;
 
     const ticker = $('#ticker');
     if (C.ticker.length) ticker.innerHTML = C.ticker.map(w => `<span>${esc(w)}</span><i>◆</i>`).join('');
@@ -316,9 +394,10 @@
     $('#servicesList').innerHTML = C.about.services.map((s, i) => `<li><span>${esc(s)}</span><b>${pad(i + 1)}</b></li>`).join('');
     $('#servicesList').closest('.kit').hidden = !C.about.services.length;
 
-    // numeração das seções: 01 trabalhos, 02 sobre, extras…, contato por último
+    // numeração das seções: trabalhos, design, sobre, extras…, contato por último
     let n = 1;
     $('#worksNum').textContent = pad(n++);
+    if (showDesign) $('#designNum').textContent = pad(n++);
     if (show.about !== false) $('#aboutNum').textContent = pad(n++);
     n = renderSections(C, n).n;
     $('#contactNum').textContent = pad(n);
@@ -336,13 +415,45 @@
     $$('[data-handle="instagram"]').forEach(el => { el.textContent = `@${ig} ↗`; });
     $$('[data-handle="vimeo"]').forEach(el => { el.textContent = `/${vm} ↗`; });
 
+    // canal do YouTube: aceita link completo (/@canal, /channel/…, /c/…) ou só o @usuário
+    const ytRaw = String(C.contact.youtube || '').trim();
+    const ytUrl = !ytRaw ? ''
+      : /^https?:\/\//i.test(ytRaw) ? ytRaw
+      : /^(www\.|m\.)?(youtube\.com|youtu\.be)\//i.test(ytRaw) ? 'https://' + ytRaw
+      : `https://www.youtube.com/@${ytRaw.replace(/^@/, '')}`;
+    const ytName = (ytUrl.match(/youtube\.com\/(@[^/?#]+)/i) || [])[1] || 'Canal';
+    $$('[data-link="youtube"]').forEach(a => { a.href = ytUrl || '#'; a.hidden = !ytUrl; });
+    $$('[data-handle="youtube"]').forEach(el => { el.textContent = `${ytName} ↗`; });
+
+    // WhatsApp (número) + outros links, todos com ícone automático
+    const wa = String(C.contact.whatsapp || '').trim();
+    const extra = [
+      wa && { label: 'WhatsApp', handle: wa.replace(/^https?:\/\/(wa\.me|api\.whatsapp\.com)\/?/i, '') + ' ↗', url: socialUrl(wa) },
+      ...(C.contact.links || []).filter(l => l && l.label && l.url).map(l => ({ label: l.label, handle: l.handle || '↗', url: socialUrl(l.url) })),
+    ].filter(Boolean);
     const links = $('#contactLinks');
-    (C.contact.links || []).filter(l => l && l.label && l.url).forEach(l => {
-      let url = String(l.url).trim();
-      if (!/^(https?:|mailto:|tel:)/i.test(url)) url = 'https://' + url;
+    extra.forEach(l => {
       links.insertAdjacentHTML('beforeend',
-        `<a href="${esc(url)}" target="_blank" rel="noopener" class="clink" data-magnet><span class="clink__t">${esc(l.label)}</span><span class="clink__h mono">${esc(l.handle || '↗')}</span></a>`);
+        `<a href="${esc(l.url)}" target="_blank" rel="noopener" class="clink" data-magnet><span class="clink__t">${iconSvg(l.url)}${esc(l.label)}</span><span class="clink__h mono">${esc(l.handle)}</span></a>`);
     });
+    // ícone nos links fixos (Instagram, Vimeo, YouTube) do contato e do menu do celular
+    $$('a[data-link]').forEach(a => {
+      const t = $('.clink__t', a) || a;
+      if (!$('.ico', t)) t.insertAdjacentHTML('afterbegin', iconSvg(a.href));
+    });
+
+    // redes no rodapé
+    const social = [
+      ig && { label: 'Instagram', url: `https://www.instagram.com/${ig}/` },
+      vm && { label: 'Vimeo', url: `https://vimeo.com/${vm}` },
+      ytUrl && { label: 'YouTube', url: ytUrl },
+      ...extra.map(l => ({ label: l.label, url: l.url })),
+    ].filter(Boolean);
+    const foot = $('#footSocial');
+    if (foot) {
+      foot.innerHTML = social.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener" aria-label="${esc(s.label)}">${iconSvg(s.url)}<span>${esc(s.label)}</span></a>`).join('');
+      foot.hidden = !social.length;
+    }
 
     if (body.classList.contains('is-preview')) {
       body.insertAdjacentHTML('beforeend', '<div class="preview-bar">Pré-visualização — ainda não publicado</div>');
@@ -353,10 +464,14 @@
      INIT — roda depois que o conteúdo carregou
      ═══════════════════════════════════════════════════════════ */
   function init(C) {
-    const PROJECTS = C.projects.filter(p => p && !p.hidden && (p.id || p.yt || p.file));
-    const CAT = Object.fromEntries(C.categories.filter(c => c && c.key).map(c => [c.key, c.label || c.key]));
+    // vídeo, projeto com galeria/antes-depois, ou link de outro site com capa
+    const PROJECTS = C.projects.filter(p => p && !p.hidden && (isVideo(p) || hasExtras(p) || (linkOf(p) && p.thumb)));
+    const DESIGNS = visibleDesigns(C);
+    const catMap = cats => Object.fromEntries(arr(cats).filter(c => c && c.key).map(c => [c.key, c.label || c.key]));
+    const CAT = catMap(C.categories);
+    const DCAT = catMap(C.designCategories);
     const accent = applyTheme(C.theme);
-    applyContent(C, PROJECTS, accent);
+    applyContent(C, PROJECTS, DESIGNS, accent);
 
     // 00:00:18:00 — timecode estilo broadcast
     const tc = s => `00:${pad(Math.floor(s / 60))}:${pad(s % 60)}:00`;
@@ -368,6 +483,9 @@
       if (THUMBS_LOCAL && p.id) list.push(`assets/thumbs/${p.id}.jpg`);
       if (p.th) list.push(`${CDN}${p.th}_${w}`, `${CDN}${p.th}_640`);
       if (p.yt) list.push(`https://i.ytimg.com/vi/${p.yt}/maxresdefault.jpg`, `https://i.ytimg.com/vi/${p.yt}/hqdefault.jpg`);
+      // sem capa: primeira foto da galeria ou o "depois" do primeiro antes/depois
+      if (imagesOf(p)[0]) list.push(asset(imagesOf(p)[0]));
+      if (pairsOf(p)[0]) list.push(asset(pairsOf(p)[0].after));
       return [...new Set(list.filter(Boolean))];
     }
     function makeThumb(p, w = 1280, onDone) {
@@ -489,84 +607,111 @@
       clientTrack.closest('.clients').hidden = true;
     }
 
-    /* ══════════ GRID DE TRABALHOS ══════════ */
-    const grid = $('#grid');
-    const cards = PROJECTS.map((p, i) => {
-      const el = document.createElement('article');
-      el.className = 'card';
-      el.dataset.cat = p.cat || '';
-      const meta = `${esc(p.c)}${p.c && p.y ? ' · ' : ''}${esc(p.y)}`;
-      el.innerHTML = `
-        <button class="card__media" type="button"
-          data-video="${esc(p.id || '')}" data-h="${esc(p.h || '')}" data-yt="${esc(p.yt || '')}" data-file="${esc(p.file ? asset(p.file) : '')}"
-          data-title="${esc(p.t)}" data-meta="${meta}" data-ar="${+p.ar || 16 / 9}"
-          aria-label="Assistir ${esc(p.t)}">
-          <span class="card__tc mono"><i></i>${tc(+p.d || 0)}</span>
-          ${p.cat ? `<span class="card__cat mono">${esc(CAT[p.cat] || p.cat).toUpperCase()}</span>` : ''}
-          <span class="card__play" aria-hidden="true">▶</span>
-        </button>
-        <div class="card__info">
-          <span class="card__n mono">${pad(i + 1)}</span>
-          <h3 class="card__t">${esc(p.t)}</h3>
-          <span class="card__c mono">${meta}</span>
-        </div>`;
-      const img = makeThumb(p, 1280);
-      img.loading = i < 4 ? 'eager' : 'lazy';
-      $('.card__media', el).prepend(img);
-      grid.appendChild(el);
-      return el;
-    });
-
+    /* ══════════ GRIDS: TRABALHOS (vídeo) e DESIGN / FOTOS / 3D ══════════ */
     // ritmo editorial: 7/5 · 5/7 · 4/4/4 — o card menor desce um pouco
     const PATTERN = [[7, 5], [5, 7], [4, 4, 4]];
     const OFFSET  = [[0, 1], [1, 0], [0, 1, 0]];
-    function layout() {
-      const vis = cards.filter(c => !c.classList.contains('is-hidden'));
-      let i = 0, r = 0;
-      while (i < vis.length) {
-        const row = PATTERN[r % PATTERN.length];
-        const off = OFFSET[r % OFFSET.length];
-        const n = Math.min(row.length, vis.length - i);
-        const spans = n === row.length ? row : (n === 1 ? [12] : [6, 6]);
-        for (let k = 0; k < n; k++) {
-          const c = vis[i + k];
-          c.style.setProperty('--span', spans[k]);
-          c.classList.toggle('card--offset', n === row.length && !!off[k]);
-        }
-        i += n; r++;
-      }
-    }
-    layout();
+    const LISTS = { video: PROJECTS, design: DESIGNS };
 
-    // contadores nos filtros (esconde filtro sem projeto)
-    $$('.filter').forEach(b => {
-      const f = b.dataset.filter;
-      const n = f === 'all' ? PROJECTS.length : PROJECTS.filter(p => p.cat === f).length;
-      $('sup', b).textContent = pad(n);
-      if (f !== 'all') b.hidden = n === 0;
-    });
-
-    // filtro
-    const filters = $('#filters');
-    filters && filters.addEventListener('click', e => {
-      const b = e.target.closest('.filter');
-      if (!b || b.classList.contains('is-on')) return;
-      $$('.filter', filters).forEach(x => x.classList.toggle('is-on', x === b));
-      const f = b.dataset.filter;
-      cards.forEach(c => {
-        c.classList.toggle('is-hidden', f !== 'all' && c.dataset.cat !== f);
-        c.classList.remove('is-in');
-        c.style.transitionDelay = '';
+    function buildGrid(items, grid, filters, cats, kind) {
+      if (!grid) return [];
+      const isDesign = kind === 'design';
+      const cards = items.map((p, i) => {
+        const el = document.createElement('article');
+        el.className = 'card';
+        el.dataset.cat = p.cat || '';
+        const meta = `${esc(p.c)}${p.c && p.y ? ' · ' : ''}${esc(p.y)}`;
+        const nImg = imagesOf(p).length;
+        const extras = [
+          nImg ? `${pad(nImg)} ${nImg === 1 ? 'FOTO' : 'FOTOS'}` : '',
+          pairsOf(p).length ? 'ANTES/DEPOIS' : '',
+          p.model ? '3D' : '',
+          p.doc ? 'PDF' : '',
+        ].filter(Boolean);
+        // com galeria/antes-depois/3D abre a página do projeto; só vídeo abre direto o player
+        // link de outro site (sem vídeo nem galeria): o card abre o link numa aba nova
+        const onlyLink = !isDesign && !isVideo(p) && !hasExtras(p);
+        const open = onlyLink
+          ? `data-href="${esc(linkOf(p))}"`
+          : isDesign || hasExtras(p)
+            ? `data-case="${kind}:${i}"`
+            : `data-video="${esc(p.id || '')}" data-h="${esc(p.h || '')}" data-yt="${esc(p.yt || '')}" data-file="${esc(p.file ? asset(p.file) : '')}"
+               data-title="${esc(p.t)}" data-meta="${meta}" data-ar="${+p.ar || 16 / 9}"`;
+        const tag = isDesign ? (extras.join(' · ') || 'PROJETO') : onlyLink ? 'LINK ↗' : isVideo(p) ? tc(+p.d || 0) : 'PROJETO';
+        const cursorTxt = isDesign || !isVideo(p) ? (onlyLink ? 'ABRIR' : 'VER') : 'PLAY';
+        el.innerHTML = `
+          <button class="card__media" type="button" ${open} data-cursor="${cursorTxt}"
+            aria-label="${cursorTxt === 'PLAY' ? 'Assistir' : 'Ver'} ${esc(p.t)}">
+            <span class="card__tc mono"><i></i>${tag}</span>
+            ${p.cat ? `<span class="card__cat mono">${esc(cats[p.cat] || p.cat).toUpperCase()}</span>` : ''}
+            ${!isDesign && extras.length ? `<span class="card__extra mono">+ ${extras.join(' · ')}</span>` : ''}
+            <span class="card__play" aria-hidden="true">${cursorTxt === 'PLAY' ? '▶' : '↗'}</span>
+          </button>
+          <div class="card__info">
+            <span class="card__n mono">${pad(i + 1)}</span>
+            <h3 class="card__t">${esc(p.t)}</h3>
+            <span class="card__c mono">${meta}</span>
+          </div>`;
+        const img = makeThumb(p, 1280);
+        img.loading = i < 4 ? 'eager' : 'lazy';
+        $('.card__media', el).prepend(img);
+        grid.appendChild(el);
+        return el;
       });
+
+      function layout() {
+        const vis = cards.filter(c => !c.classList.contains('is-hidden'));
+        let i = 0, r = 0;
+        while (i < vis.length) {
+          const row = PATTERN[r % PATTERN.length];
+          const off = OFFSET[r % OFFSET.length];
+          const n = Math.min(row.length, vis.length - i);
+          const spans = n === row.length ? row : (n === 1 ? [12] : [6, 6]);
+          for (let k = 0; k < n; k++) {
+            const c = vis[i + k];
+            c.style.setProperty('--span', spans[k]);
+            c.classList.toggle('card--offset', n === row.length && !!off[k]);
+          }
+          i += n; r++;
+        }
+      }
       layout();
-      const vis = cards.filter(c => !c.classList.contains('is-hidden'));
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        vis.forEach((c, k) => {
-          c.style.transitionDelay = `${Math.min(k, 8) * 60}ms`;
-          c.classList.add('is-in');
+
+      if (!filters) return cards;
+      // contadores nos filtros (esconde filtro sem projeto)
+      $$('.filter', filters).forEach(b => {
+        const f = b.dataset.filter;
+        const n = f === 'all' ? items.length : items.filter(p => p.cat === f).length;
+        $('sup', b).textContent = pad(n);
+        if (f !== 'all') b.hidden = n === 0;
+      });
+
+      filters.addEventListener('click', e => {
+        const b = e.target.closest('.filter');
+        if (!b || b.classList.contains('is-on')) return;
+        $$('.filter', filters).forEach(x => x.classList.toggle('is-on', x === b));
+        const f = b.dataset.filter;
+        cards.forEach(c => {
+          c.classList.toggle('is-hidden', f !== 'all' && c.dataset.cat !== f);
+          c.classList.remove('is-in');
+          c.style.transitionDelay = '';
         });
-      }));
-    });
+        layout();
+        const vis = cards.filter(c => !c.classList.contains('is-hidden'));
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          vis.forEach((c, k) => {
+            c.style.transitionDelay = `${Math.min(k, 8) * 60}ms`;
+            c.classList.add('is-in');
+          });
+        }));
+      });
+      return cards;
+    }
+
+    const cards = [
+      ...buildGrid(PROJECTS, $('#grid'), $('#filters'), CAT, 'video'),
+      ...(DESIGNS.length ? buildGrid(DESIGNS, $('#designGrid'), $('#designFilters'), DCAT, 'design') : []),
+    ];
 
     /* ══════════ OBSERVERS (reveal, scramble-in, split, contadores) ══════════ */
     function countUp(el) {
@@ -710,6 +855,19 @@
     const modalClose = $('#modalClose');
     let lastFocus = null, closeTimer = null;
 
+    function playerHtml(o) {
+      const t = esc(o.title || 'Vídeo');
+      if (o.id) {
+        return `<iframe src="https://player.vimeo.com/video/${encodeURIComponent(o.id)}?${o.h ? 'h=' + encodeURIComponent(o.h) + '&' : ''}autoplay=1&title=0&byline=0&portrait=0&color=${VCOLOR}&dnt=1"
+            allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="${t}"></iframe>`;
+      }
+      if (o.yt) {
+        return `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(o.yt)}?autoplay=1&rel=0"
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen title="${t}"></iframe>`;
+      }
+      return `<video src="${esc(o.file)}" controls autoplay playsinline title="${t}"></video>`;
+    }
+
     function openVideo(o) {
       clearTimeout(closeTimer);
       if (drawer.classList.contains('is-open')) setMenu(false);
@@ -717,18 +875,7 @@
       modalTitle.textContent = o.title || '';
       modalMeta.textContent = o.meta || (o.id ? `vimeo.com/${o.id}` : '');
       modal.style.setProperty('--ar', o.ar || 16 / 9);
-      const t = esc(o.title || 'Vídeo');
-      if (o.id) {
-        modalFrame.innerHTML =
-          `<iframe src="https://player.vimeo.com/video/${encodeURIComponent(o.id)}?${o.h ? 'h=' + encodeURIComponent(o.h) + '&' : ''}autoplay=1&title=0&byline=0&portrait=0&color=${VCOLOR}&dnt=1"
-            allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="${t}"></iframe>`;
-      } else if (o.yt) {
-        modalFrame.innerHTML =
-          `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(o.yt)}?autoplay=1&rel=0"
-            allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen title="${t}"></iframe>`;
-      } else {
-        modalFrame.innerHTML = `<video src="${esc(o.file)}" controls autoplay playsinline title="${t}"></video>`;
-      }
+      modalFrame.innerHTML = playerHtml(o);
       modal.classList.add('is-open');
       body.classList.add('modal-open');
       modalClose.focus({ preventScroll: true });
@@ -741,7 +888,159 @@
       if (lastFocus) lastFocus.focus({ preventScroll: true });
     }
 
+    /* ══════════ PÁGINA DO PROJETO: vídeo, galeria, antes e depois, 3D, PDF ══════════ */
+    const caseEl = $('#case');
+    const caseInner = $('#caseInner');
+    const caseClose = $('#caseClose');
+    let caseFocus = null, caseTimer = null, galImgs = [];
+    let mvLoading = null;
+    const loadModelViewer = () => (mvLoading ||= import(MODEL_VIEWER).catch(err => { mvLoading = null; throw err; }));
+    const L = C.labels;
+
+    const compareHtml = c => `
+      <div class="cmp-wrap">
+        <figure class="cmp">
+          <img class="cmp__base" src="${esc(asset(c.before))}" alt="${esc(L.before)}" loading="lazy" draggable="false">
+          <div class="cmp__top"><img src="${esc(asset(c.after))}" alt="${esc(L.after)}" loading="lazy" draggable="false"></div>
+          <span class="cmp__tag cmp__tag--l mono">${esc(L.before)}</span>
+          <span class="cmp__tag cmp__tag--r mono">${esc(L.after)}</span>
+          <span class="cmp__bar" aria-hidden="true"><i>⇆</i></span>
+          <input class="cmp__range" type="range" min="0" max="100" step="0.1" value="50" aria-label="${esc(L.before)} / ${esc(L.after)}">
+        </figure>
+        ${c.label ? `<p class="cmp__cap mono">${esc(c.label)}</p>` : ''}
+      </div>`;
+
+    function openCase(p) {
+      clearTimeout(caseTimer);
+      if (drawer.classList.contains('is-open')) setMenu(false);
+      caseFocus = document.activeElement;
+      const imgs = imagesOf(p).map(asset);
+      const pairs = pairsOf(p);
+      galImgs = imgs;
+      const kicker = [CAT[p.cat] || DCAT[p.cat] || '', p.c, p.y].filter(Boolean).map(esc).join(' · ');
+      const desc = String(p.desc || '').split(/\n\s*\n/).map(x => x.trim()).filter(Boolean)
+        .map(x => `<p>${rich(x).replace(/\n/g, '<br>')}</p>`).join('');
+      const link = linkOf(p);
+
+      const blocks = [];
+      if (isVideo(p)) {
+        blocks.push(`<div class="case__player" style="--ar:${+p.ar || 16 / 9}">${playerHtml({ id: p.id, h: p.h, yt: p.yt, file: p.file ? asset(p.file) : '', title: p.t })}</div>`);
+      }
+      if (p.model) {
+        blocks.push(`<section class="case__block">
+          <h3 class="case__h mono">${esc(L.model)} <span>· arraste para girar</span></h3>
+          <div class="case__model">
+            <model-viewer src="${esc(asset(p.model))}" ${p.thumb ? `poster="${esc(asset(p.thumb))}"` : ''} alt="${esc(p.t)}"
+              camera-controls auto-rotate touch-action="pan-y" shadow-intensity="1" interaction-prompt="auto" ar></model-viewer>
+            <span class="case__loading mono">Carregando 3D…</span>
+          </div>
+        </section>`);
+      }
+      if (pairs.length) {
+        blocks.push(`<section class="case__block"><h3 class="case__h mono">${esc(L.compare)} <span>· arraste a barra</span></h3>${pairs.map(compareHtml).join('')}</section>`);
+      }
+      if (imgs.length) {
+        blocks.push(`<section class="case__block">
+          <h3 class="case__h mono">${esc(L.gallery)} <span>· ${pad(imgs.length)}</span></h3>
+          <div class="case__gal">${imgs.map((u, i) => `<button type="button" class="case__img" data-gal="${i}" data-cursor="ZOOM" aria-label="Ampliar imagem ${i + 1}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('')}</div>
+        </section>`);
+      }
+
+      caseInner.innerHTML = `
+        <header class="case__head">
+          ${kicker ? `<p class="case__kicker mono">${kicker}</p>` : ''}
+          <h2 class="case__title" id="caseTitle">${esc(p.t)}</h2>
+          ${desc ? `<div class="case__desc">${desc}</div>` : ''}
+          ${link || p.doc ? `<div class="case__actions">
+            ${link ? `<a class="btn btn--flare" href="${esc(link)}" target="_blank" rel="noopener"><span>${esc((p.link && p.link.label) || 'Ver projeto')} ↗</span></a>` : ''}
+            ${p.doc ? `<a class="btn btn--ghost" href="${esc(asset(p.doc))}" target="_blank" rel="noopener"><span>Abrir PDF ↗</span></a>` : ''}
+          </div>` : ''}
+        </header>
+        ${blocks.join('')}`;
+
+      caseEl.scrollTop = 0;
+      caseEl.classList.add('is-open');
+      body.classList.add('modal-open');
+      caseClose.focus({ preventScroll: true });
+
+      if (p.model) {
+        const loading = $('.case__loading', caseInner);
+        const mv = $('model-viewer', caseInner);
+        mv.addEventListener('load', () => loading.classList.add('is-done'), { once: true });
+        mv.addEventListener('error', () => { loading.textContent = 'Não foi possível carregar o modelo 3D.'; }, { once: true });
+        loadModelViewer().catch(() => { loading.textContent = 'Não foi possível carregar o visualizador 3D.'; });
+      }
+    }
+    function closeCase() {
+      if (!caseEl.classList.contains('is-open')) return;
+      caseEl.classList.remove('is-open');
+      body.classList.remove('modal-open');
+      caseTimer = setTimeout(() => { caseInner.innerHTML = ''; }, 450); // para o vídeo
+      if (caseFocus) caseFocus.focus({ preventScroll: true });
+    }
+    caseClose.addEventListener('click', closeCase);
+    // barra do antes e depois
+    caseInner.addEventListener('input', e => {
+      const r = e.target.closest('.cmp__range');
+      if (r) r.parentElement.style.setProperty('--pos', r.value + '%');
+    });
+    caseInner.addEventListener('click', e => {
+      const g = e.target.closest('[data-gal]');
+      if (g) openLightbox(+g.dataset.gal);
+    });
+
+    /* ══ galeria ampliada ══ */
+    const lb = $('#lightbox');
+    const lbImg = $('#lbImg');
+    let lbIndex = 0;
+    function showLightbox(i) {
+      if (!galImgs.length) return;
+      lbIndex = (i + galImgs.length) % galImgs.length;
+      lbImg.src = galImgs[lbIndex];
+      $('#lbCount').textContent = `${pad(lbIndex + 1)} / ${pad(galImgs.length)}`;
+      const one = galImgs.length < 2;
+      $('#lbPrev').hidden = one;
+      $('#lbNext').hidden = one;
+      // já deixa a próxima carregando
+      if (!one) { const pre = new Image(); pre.src = galImgs[(lbIndex + 1) % galImgs.length]; }
+    }
+    function openLightbox(i) {
+      showLightbox(i);
+      lb.classList.add('is-open');
+      $('#lbClose').focus({ preventScroll: true });
+    }
+    const closeLightbox = () => lb.classList.remove('is-open');
+    $('#lbClose').addEventListener('click', closeLightbox);
+    $('#lbPrev').addEventListener('click', () => showLightbox(lbIndex - 1));
+    $('#lbNext').addEventListener('click', () => showLightbox(lbIndex + 1));
+    let swipeX = null, swiped = false;
+    lb.addEventListener('pointerdown', e => { swipeX = e.clientX; swiped = false; });
+    lb.addEventListener('pointerup', e => {
+      if (swipeX === null) return;
+      const dx = e.clientX - swipeX;
+      swipeX = null;
+      if (Math.abs(dx) > 50 && galImgs.length > 1) { swiped = true; showLightbox(lbIndex + (dx < 0 ? 1 : -1)); }
+    });
+    lb.addEventListener('click', e => {
+      if (swiped) { swiped = false; return; }
+      if (e.target === lb || e.target.classList.contains('lightbox__stage')) closeLightbox();
+    });
+
     document.addEventListener('click', e => {
+      const hr = e.target.closest('[data-href]');
+      if (hr) {
+        e.preventDefault();
+        if (/^(https?:|mailto:|tel:)/i.test(hr.dataset.href)) window.open(hr.dataset.href, '_blank', 'noopener');
+        return;
+      }
+      const cs = e.target.closest('[data-case]');
+      if (cs) {
+        e.preventDefault();
+        const [kind, i] = cs.dataset.case.split(':');
+        const p = (LISTS[kind] || [])[+i];
+        if (p) openCase(p);
+        return;
+      }
       const t = e.target.closest('[data-video], [data-yt], [data-file]');
       if (!t) return;
       const d = t.dataset;
@@ -752,7 +1051,16 @@
     modalClose.addEventListener('click', closeVideo);
     modal.addEventListener('click', e => { if (e.target === modal) closeVideo(); });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { closeVideo(); if (drawer.classList.contains('is-open')) setMenu(false); }
+      if (lb.classList.contains('is-open')) {
+        if (e.key === 'Escape') closeLightbox();
+        else if (e.key === 'ArrowLeft') showLightbox(lbIndex - 1);
+        else if (e.key === 'ArrowRight') showLightbox(lbIndex + 1);
+        return;
+      }
+      if (e.key !== 'Escape') return;
+      if (caseEl.classList.contains('is-open')) return closeCase();
+      closeVideo();
+      if (drawer.classList.contains('is-open')) setMenu(false);
     });
 
     /* ══════════ CURSOR + GLOW + MAGNET ══════════ */
@@ -764,6 +1072,7 @@
       const cursor = $('#cursor');
       const dot = $('.cursor__dot', cursor);
       const ring = $('.cursor__ring', cursor);
+      const cursorText = $('.cursor__text', cursor);
       let rx = mx, ry = my;
 
       addEventListener('mousemove', e => {
@@ -774,11 +1083,12 @@
 
       document.addEventListener('mouseover', e => {
         const el = e.target;
-        const play = el.closest('.card__media');
-        const hover = el.closest('a, button, .kit__list li, .marquee__track span');
+        const play = el.closest('.card__media, .case__img');
+        const hover = el.closest('a, button, .kit__list li, .marquee__track span, .cmp');
+        if (play) cursorText.textContent = play.dataset.cursor || 'PLAY';
         cursor.classList.toggle('is-play', !!play);
         cursor.classList.toggle('is-hover', !play && !!hover);
-        if (el.closest('.modal__frame')) cursor.classList.add('is-away');
+        if (el.closest('.modal__frame, .case__player')) cursor.classList.add('is-away');
       });
 
       const loop = () => {
