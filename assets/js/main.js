@@ -358,8 +358,10 @@ function applyContent(){
 
   /* botão flutuante do WhatsApp — número próprio ou o primeiro WhatsApp dos links */
   const wa = c.whatsapp || {};
-  const waDigits = String(wa.number || '').replace(/\D/g, '')
-    || (links.find(l => iconKey(l.href) === 'whatsapp')?.href.match(/wa\.me\/(\d+)/) || [])[1] || '';
+  const waLink = links.find(l => iconKey(l.href) === 'whatsapp')?.href || '';
+  let waDigits = String(wa.number || '').replace(/\D/g, '')
+    || (waLink.match(/wa\.me\/(\d+)|[?&]phone=\+?(\d+)/) || []).slice(1).find(Boolean) || '';
+  if (/^\d{10,11}$/.test(waDigits)) waDigits = '55' + waDigits;   // DDD + número sem o país → Brasil
   const waBtn = $('#waFloat');
   waBtn.hidden = wa.enabled === false || !/^\d{8,15}$/.test(waDigits);
   waBtn.href = `https://wa.me/${waDigits}${wa.message ? '?text=' + encodeURIComponent(wa.message) : ''}`;
