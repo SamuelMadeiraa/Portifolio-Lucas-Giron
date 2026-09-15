@@ -236,4 +236,13 @@ window.SITE_DEFAULT = {
     backToTop: 'VOLTAR AO TOPO ↑',
     social: true,   // redes do contato no rodapé, com ícone
   },
+
+  // botão flutuante do WhatsApp (sem número, usa o WhatsApp da lista de links do contato)
+  whatsapp: {
+    enabled: true,
+    number: '',
+    message: 'Olá, Lucas! Vi seu portfólio e quero conversar sobre um projeto.',
+    label: 'Vamos conversar?',
+    side: 'right',
+  },
 };

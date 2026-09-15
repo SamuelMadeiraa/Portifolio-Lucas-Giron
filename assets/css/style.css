@@ -747,10 +747,66 @@ body.no-vignette .fx-vignette{ display:none }
 /* ícones das redes */
 .ico{ width:1em; height:1em; flex:none }
 .clink__t{ display:inline-flex; align-items:center; gap:.5em }
-.clink__t .ico{ width:.9em; height:.9em }
+.clink__t{ gap:.6em }
+.clink__ico{
+  display:grid; place-items:center; width:2.1em; height:2.1em; border-radius:50%;
+  background:rgba(var(--paper-rgb),.08); transition:background .35s,color .35s;
+}
+.clink__ico .ico{ width:1.1em; height:1.1em }
 .drawer__foot a{ display:inline-flex; align-items:center; gap:.45rem }
-.drawer__foot .ico{ width:15px; height:15px }
-.foot__social{ display:flex; flex-wrap:wrap; gap:.5rem 1.3rem }
-.foot__social a{ display:inline-flex; align-items:center; gap:.45rem; transition:color .3s }
-.foot__social a:hover{ color:var(--flare) }
-.foot__social .ico{ width:16px; height:16px }
+.drawer__foot .ico{ width:17px; height:17px }
+
+/* cores das marcas ao passar o mouse */
+.clink--instagram, .soc--instagram{ --brand:#E1306C }
+.clink--whatsapp, .soc--whatsapp{ --brand:#25D366 }
+.clink--youtube, .soc--youtube{ --brand:#FF0000 }
+.clink--vimeo, .soc--vimeo{ --brand:#1AB7EA }
+.clink--linkedin, .soc--linkedin{ --brand:#0A66C2 }
+.clink--behance, .soc--behance{ --brand:#1769FF }
+.clink--facebook, .soc--facebook{ --brand:#1877F2 }
+.clink--tiktok, .soc--tiktok, .clink--x, .soc--x, .clink--github, .soc--github{ --brand:#000 }
+.clink:hover .clink__ico{ background:var(--brand,var(--flare)); color:#fff }
+
+.foot__social{ display:flex; flex-wrap:wrap; gap:.6rem }
+.soc{
+  display:grid; place-items:center; width:40px; height:40px; border-radius:50%;
+  border:1px solid var(--line); color:var(--paper);
+  transition:background .3s,border-color .3s,color .3s,transform .3s var(--ease);
+}
+.soc .ico{ width:18px; height:18px }
+.soc:hover{ background:var(--brand,var(--flare)); border-color:var(--brand,var(--flare)); color:#fff; transform:translateY(-3px) }
+
+/* ═══════ WHATSAPP FLUTUANTE ═══════ */
+.wa-float{
+  position:fixed; right:clamp(14px,2.2vw,28px); bottom:clamp(14px,2.2vw,28px); z-index:9750;
+  display:flex; align-items:center; gap:.7rem; color:#fff;
+  animation:waIn .6s var(--ease) 1.2s both;
+}
+.wa-float--left{ right:auto; left:clamp(14px,2.2vw,28px); flex-direction:row-reverse }
+.wa-float__btn{
+  position:relative; display:grid; place-items:center; width:58px; height:58px; border-radius:50%;
+  background:#25D366; box-shadow:0 8px 24px rgba(0,0,0,.35); transition:transform .3s var(--ease);
+}
+.wa-float__btn::before{
+  content:''; position:absolute; inset:0; border-radius:50%; background:#25D366; z-index:-1;
+  animation:waPulse 2.4s ease-out infinite;
+}
+.wa-float__btn svg{ width:30px; height:30px }
+.wa-float:hover .wa-float__btn{ transform:scale(1.08) }
+.wa-float__label{
+  padding:.55rem .9rem; border-radius:999px; background:#fff; color:#111; font-size:.85rem; font-weight:600;
+  white-space:nowrap; box-shadow:0 6px 18px rgba(0,0,0,.25);
+  opacity:0; transform:translateX(8px); pointer-events:none; transition:opacity .3s,transform .3s var(--ease);
+}
+.wa-float--left .wa-float__label{ transform:translateX(-8px) }
+.wa-float:hover .wa-float__label, .wa-float:focus-visible .wa-float__label{ opacity:1; transform:none }
+@keyframes waIn{ from{ opacity:0; transform:translateY(20px) scale(.8) } to{ opacity:1; transform:none } }
+@keyframes waPulse{ 0%{ transform:scale(1); opacity:.55 } 80%,100%{ transform:scale(1.7); opacity:0 } }
+@media (max-width:640px){
+  .wa-float__btn{ width:52px; height:52px }
+  .wa-float__btn svg{ width:27px; height:27px }
+  .wa-float__label{ display:none }
+}
+@media (prefers-reduced-motion:reduce){ .wa-float, .wa-float__btn::before{ animation:none } }
+body:has(.modal.is-open) .wa-float{ opacity:0; pointer-events:none }
+body:has(.wa-float:not([hidden])) .foot{ padding-bottom:calc(1.6rem + 78px) }

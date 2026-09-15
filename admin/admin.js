@@ -1350,7 +1350,7 @@ function viewClients() {
 
 /* ── Contato & rodapé ── */
 function viewContact() {
-  const c = S.draft.contact, f = S.draft.footer;
+  const c = S.draft.contact, f = S.draft.footer, w = S.draft.whatsapp;
   return frag(
     box('Chamada', null,
       grid(field(c, 'num', { label: 'Número' }), field(c, 'kicker', { label: 'Frase acima do título' })),
@@ -1364,6 +1364,13 @@ function viewContact() {
         { key: 'url', label: 'Link', w: '1.4fr', placeholder: 'https://… ou número do WhatsApp' },
       ], { addLabel: 'Adicionar link' }),
       tip('WhatsApp: coloque só o número com DDD e país (ex.: 55 48 99999-9999) que o link é criado sozinho. Para o canal do YouTube, cole o link do canal (youtube.com/@seucanal).')),
+    box('WhatsApp flutuante', 'Botão verde que fica fixo no canto da tela, em qualquer parte do site.',
+      field(w, 'enabled', { type: 'toggle', label: 'Mostrar o botão flutuante' }),
+      grid(
+        field(w, 'number', { label: 'Número do WhatsApp', placeholder: '55 48 99999-9999', hint: 'Com país e DDD. Vazio = usa o WhatsApp da lista acima.' }),
+        field(w, 'label', { label: 'Texto ao passar o mouse', placeholder: 'Vamos conversar?' }),
+        field(w, 'side', { label: 'Canto da tela', options: [{ value: 'right', label: 'Direita' }, { value: 'left', label: 'Esquerda' }] })),
+      field(w, 'message', { rows: 2, label: 'Mensagem que já vem escrita', hint: 'Opcional.' })),
     box('Rodapé', null,
       grid(field(f, 'name', { label: 'Nome (após o ©)' }), field(f, 'note', { label: 'Texto do meio' }), field(f, 'backToTop', { label: 'Link “voltar ao topo”' })),
       field(f, 'social', { type: 'toggle', label: 'Mostrar as redes com ícones no rodapé' })));
@@ -1650,7 +1657,7 @@ function viewHistory() {
 const KEY_NAMES = {
   projects: 'Projetos', categories: 'Categorias', layout: 'Seções', nav: 'Menu', theme: 'Cores',
   typography: 'Fontes', effects: 'Efeitos', hero: 'Início', about: 'Sobre e listas', clients: 'Clientes',
-  ticker: 'Faixa de palavras', contact: 'Contato', footer: 'Rodapé', seo: 'Google e compartilhamento',
+  ticker: 'Faixa de palavras', contact: 'Contato', footer: 'Rodapé', whatsapp: 'WhatsApp flutuante', seo: 'Google e compartilhamento',
   brand: 'Marca', showreel: 'Showreel', works: 'Seção de trabalhos',
   designs: 'Design & 3D', designCategories: 'Categorias de design', design: 'Seção Design & 3D',
 };

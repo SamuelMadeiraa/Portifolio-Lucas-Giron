@@ -102,7 +102,24 @@ const ICON_RULES = [
   ['github', 'github\\.com'], ['dribbble', 'dribbble\\.com'], ['spotify', 'spotify\\.com'],
   ['telegram', '(t\\.me|telegram\\.(me|org))'], ['pinterest', 'pinterest\\.'],
 ].map(([k, re]) => [k, new RegExp(HOST + re, 'i')]).concat([['mail', /^mailto:/i], ['phone', /^tel:/i]]);
-const iconSvg = url => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[(ICON_RULES.find(([, re]) => re.test(url)) || ['link'])[0]]}</svg>`;
+// logos das redes em versão sólida (os outros continuam em traço)
+const SOLID = {
+  instagram: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3zm5 3a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm5.5-3.7a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z',
+  youtube: 'M21.6 7.2a2.8 2.8 0 0 0-2-2C17.9 4.7 12 4.7 12 4.7s-5.9 0-7.6.5a2.8 2.8 0 0 0-2 2C2 8.9 2 12 2 12s0 3.1.4 4.8a2.8 2.8 0 0 0 2 2c1.7.5 7.6.5 7.6.5s5.9 0 7.6-.5a2.8 2.8 0 0 0 2-2c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8zM10 15.2V8.8l5.5 3.2z',
+  whatsapp: 'M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zM8.6 6.9c.3-.4.8-.4 1.1-.3l1.3 2.6c.1.3 0 .6-.2.8l-.7.8c.7 1.4 1.8 2.5 3.2 3.2l.8-.7c.2-.2.5-.3.8-.2l2.6 1.3c.1.3.1.8-.3 1.1-1.2 1-2.8.9-4.3.1a12 12 0 0 1-4.5-4.5c-.8-1.5-.9-3.1.2-4.2z',
+  vimeo: 'M22 7.4c-.1 1.9-1.4 4.5-4 7.9-2.6 3.5-4.9 5.2-6.7 5.2-1.1 0-2.1-1-2.9-3.1L6.8 11.7C6.2 9.6 5.6 8.6 4.9 8.6c-.1 0-.6.3-1.4.9L2.6 8.4l2.6-2.3C6.4 5.1 7.3 4.6 7.9 4.5c1.4-.1 2.3.8 2.6 2.9.4 2.2.6 3.6.8 4.1.4 1.8.8 2.7 1.3 2.7.4 0 .9-.6 1.6-1.7.7-1.1 1.1-2 1.2-2.6.1-1-.3-1.5-1.2-1.5-.4 0-.9.1-1.3.3.9-2.8 2.5-4.2 5-4.1 1.8 0 2.7 1.2 2.6 3.5z',
+  linkedin: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2.5 7v8h2.6v-8zm1.3-4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM11 10v8h2.5v-4c0-1 .2-2 1.5-2s1.4 1.1 1.4 2.1V18H19v-4.6c0-2-.5-3.6-2.9-3.6-1.3 0-2.2.6-2.6 1.3V10z',
+  facebook: 'M12 2a10 10 0 0 0-1.6 19.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.4v7A10 10 0 0 0 12 2z',
+  tiktok: 'M16.6 2h-3.2v13.2a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6 0 .8.1V9.1a6.1 6.1 0 1 0 5.3 6.1V8.6a7.7 7.7 0 0 0 4.4 1.4V6.8a4.5 4.5 0 0 1-4.4-4.8z',
+  x: 'M17.8 3h3.1l-6.8 7.7L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.2-8.3L2 3h6.4l4.4 5.8zm-1.1 16.2h1.7L7.4 4.7H5.6z',
+};
+const iconKey = url => (ICON_RULES.find(([, re]) => re.test(url)) || ['link'])[0];
+const iconSvg = url => {
+  const k = iconKey(url);
+  return SOLID[k]
+    ? `<svg class="ico ico--${k}" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${SOLID[k]}"/></svg>`
+    : `<svg class="ico ico--${k}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`;
+};
 // aceita número de WhatsApp puro e e-mail sem "mailto:"
 const socialUrl = u => {
   const s = String(u || '').trim();
@@ -329,15 +346,27 @@ function applyContent(){
   mail.parentElement.hidden = !ct.email;
   const links = (ct.links || []).filter(l => l && l.url).map(l => ({ ...l, href: socialUrl(l.url) }));
   $('#contactLinks').innerHTML = links.map(l => `
-    <a href="${esc(l.href)}" target="_blank" rel="noopener" class="clink" data-magnet>
-      <span class="clink__t">${iconSvg(l.href)}${esc(l.label)}</span><span class="clink__h mono">${esc(l.handle)}</span>
+    <a href="${esc(l.href)}" target="_blank" rel="noopener" class="clink clink--${iconKey(l.href)}" data-magnet>
+      <span class="clink__t"><span class="clink__ico">${iconSvg(l.href)}</span>${esc(l.label)}</span><span class="clink__h mono">${esc(l.handle)}</span>
     </a>`).join('');
   $('#drawerFoot').innerHTML = links.map(l =>
     `<a href="${esc(l.href)}" target="_blank" rel="noopener">${iconSvg(l.href)}${esc(String(l.label || '').toUpperCase())}</a>`).join('');
   const foot = $('#footSocial');
   foot.innerHTML = links.map(l =>
-    `<a href="${esc(l.href)}" target="_blank" rel="noopener" aria-label="${esc(l.label)}">${iconSvg(l.href)}<span>${esc(l.label)}</span></a>`).join('');
+    `<a class="soc soc--${iconKey(l.href)}" href="${esc(l.href)}" target="_blank" rel="noopener" aria-label="${esc(l.label)}" title="${esc(l.label)}">${iconSvg(l.href)}</a>`).join('');
   foot.hidden = !links.length || c.footer?.social === false;
+
+  /* botão flutuante do WhatsApp — número próprio ou o primeiro WhatsApp dos links */
+  const wa = c.whatsapp || {};
+  const waDigits = String(wa.number || '').replace(/\D/g, '')
+    || (links.find(l => iconKey(l.href) === 'whatsapp')?.href.match(/wa\.me\/(\d+)/) || [])[1] || '';
+  const waBtn = $('#waFloat');
+  waBtn.hidden = wa.enabled === false || !/^\d{8,15}$/.test(waDigits);
+  waBtn.href = `https://wa.me/${waDigits}${wa.message ? '?text=' + encodeURIComponent(wa.message) : ''}`;
+  waBtn.setAttribute('aria-label', wa.label || 'WhatsApp');
+  $('#waFloatLabel').textContent = wa.label || '';
+  $('#waFloatLabel').hidden = !wa.label;
+  waBtn.classList.toggle('wa-float--left', wa.side === 'left');
 
   /* ordem das seções + seções criadas no painel */
   const main = $('main');
