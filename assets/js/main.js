@@ -130,6 +130,34 @@ const socialUrl = u => {
   return safeUrl(s);
 };
 
+/* Google Analytics 4: carrega uma vez só, fora do localhost e da prévia do painel */
+let gaStarted = false;
+function startAnalytics(id) {
+  id = String(id || '').trim().toUpperCase();
+  if (gaStarted || !/^G-[A-Z0-9]{4,20}$/.test(id)) return;
+  if (/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || window.top !== window) return;
+  gaStarted = true;
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () { dataLayer.push(arguments); };
+  gtag('js', new Date());
+  gtag('config', id);
+  const s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+  document.head.append(s);
+
+  // cliques que interessam: WhatsApp, redes, e-mail e vídeos
+  document.addEventListener('click', e => {
+    const el = e.target.closest('#waFloat, #contactMail, .clink, .soc, #drawerFoot a, [data-play], [data-case]');
+    if (!el) return;
+    const ev = el.id === 'waFloat' ? ['whatsapp_flutuante', {}]
+      : el.id === 'contactMail' ? ['clique_email', {}]
+      : el.matches('[data-play], [data-case]') ? ['abrir_projeto', { projeto: el.querySelector('.card__t')?.textContent?.trim() || el.textContent.trim().slice(0, 60) }]
+      : ['clique_rede', { rede: iconKey(el.href || '') }];
+    gtag('event', ev[0], ev[1]);
+  }, true);
+}
+
 const repeatTo = (list, min) => {
   if (!list.length) return [];
   let out = list.slice();
@@ -272,6 +300,7 @@ function applyContent(){
   document.body.classList.toggle('no-vignette', fx.vignette === false);
 
   applyFonts(c.typography || {});
+  startAnalytics(c.analytics?.gaId);
 
   if (c.seo) {
     if (c.seo.title) document.title = c.seo.title;

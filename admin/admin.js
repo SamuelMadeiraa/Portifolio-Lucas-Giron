@@ -1480,6 +1480,9 @@ function viewGeneral() {
       field(d.seo, 'description', { label: 'Descrição', rows: 3, hint: 'Até ~155 caracteres. É o texto que aparece embaixo do título no Google.' }),
       field(d.seo, 'siteUrl', { label: 'Endereço oficial do site', placeholder: 'https://lucasgiron.com.br', hint: 'Evita que o Google trate os endereços alternativos como sites diferentes.' }),
       imageEditor(d.seo, 'ogImage', { label: 'Imagem de compartilhamento (1200 × 630)', name: 'compartilhamento' })),
+    box('Google Analytics', 'Conta as visitas do site e os cliques no WhatsApp, nas redes, no e-mail e nos projetos.',
+      field(d.analytics, 'gaId', { label: 'ID da métrica', placeholder: 'G-XXXXXXXXXX',
+        hint: 'No Google Analytics: Administrador → Fluxos de dados → seu site → “ID da métrica”. Deixe vazio para desligar.' })),
     box('Quem é (para o Google)', 'Vira ficha de identificação do site (schema.org). É o que ajuda a aparecer como resultado certo quando alguém busca pelo nome.',
       grid(
         field(d.person, 'name', { label: 'Nome' }),
@@ -1657,7 +1660,7 @@ function viewHistory() {
 const KEY_NAMES = {
   projects: 'Projetos', categories: 'Categorias', layout: 'Seções', nav: 'Menu', theme: 'Cores',
   typography: 'Fontes', effects: 'Efeitos', hero: 'Início', about: 'Sobre e listas', clients: 'Clientes',
-  ticker: 'Faixa de palavras', contact: 'Contato', footer: 'Rodapé', whatsapp: 'WhatsApp flutuante', seo: 'Google e compartilhamento',
+  ticker: 'Faixa de palavras', contact: 'Contato', footer: 'Rodapé', whatsapp: 'WhatsApp flutuante', seo: 'Google e compartilhamento', analytics: 'Google Analytics',
   brand: 'Marca', showreel: 'Showreel', works: 'Seção de trabalhos',
   designs: 'Design & 3D', designCategories: 'Categorias de design', design: 'Seção Design & 3D',
 };

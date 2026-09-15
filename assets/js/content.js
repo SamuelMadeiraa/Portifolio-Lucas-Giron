@@ -43,6 +43,9 @@ window.SITE_DEFAULT = {
     siteUrl: 'https://lucasgiron.com.br',
   },
 
+  // Google Analytics 4 — ID da métrica (G-XXXXXXXXXX). Vazio = desligado.
+  analytics: { gaId: '' },
+
   /* Usado nos dados estruturados (schema.org) que o Google lê para
      identificar de quem é o site. */
   person: {
