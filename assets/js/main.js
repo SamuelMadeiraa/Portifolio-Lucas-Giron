@@ -280,12 +280,9 @@ function applyTheme(t){
   }
   const tc = $('meta[name="theme-color"]');
   if (tc && hexRgb(t.ink)) tc.content = t.ink;
-
-  // favicon com a marca e as cores atuais
-  const mark = esc(C.brand?.mark || '');
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${t.ink}'/><text y='73' x='50' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='${mark.length > 2 ? 44 : 62}' fill='${t.flare}'>${mark}</text></svg>`;
-  const ico = $('link[rel="icon"]');
-  if (ico && hexRgb(t.ink) && hexRgb(t.flare)) ico.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  // o favicon fica nos arquivos /favicon.* (gerados por tools/gerar-icones.ps1):
+  // o Google só mostra nos resultados um ícone com endereço de verdade,
+  // então a página não troca o ícone declarado por um gerado na hora
 }
 
 const setMeta = (sel, v) => { const m = $(sel); if (m && v) m.setAttribute('content', v); };
