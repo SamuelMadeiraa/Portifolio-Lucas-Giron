@@ -10,15 +10,15 @@
   },
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "has": [{ "type": "host", "value": "www.lucasgiron.com.br" }],
-      "destination": "https://lucasgiron.com.br/:path*",
+      "destination": "https://lucasgiron.com.br/$1",
       "permanent": true
     },
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "has": [{ "type": "host", "value": "portifolio-lucas-giron.vercel.app" }],
-      "destination": "https://lucasgiron.com.br/:path*",
+      "destination": "https://lucasgiron.com.br/$1",
       "permanent": true
     },
     { "source": "/index.html", "destination": "/", "permanent": true }
