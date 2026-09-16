@@ -152,62 +152,129 @@ const extraSections = c => (c.layout || []).filter(s => s && !s.hidden && !ANCHO
 }).join('');
 
 /* ── dados estruturados (schema.org) ──────────────────── */
+const hostOf = u => { try { return new URL(u).host; } catch { return ''; } };
+// aceita tanto o código puro quanto a tag inteira colada do Search Console
+const verifyCode = v => {
+  const m = String(v || '').match(/content=["']([^"']+)["']/);
+  return (m ? m[1] : String(v || '')).trim();
+};
+const keywordList = v => (Array.isArray(v) ? v : String(v || '').split(','))
+  .map(s => String(s).trim()).filter(Boolean);
+
 function jsonLd(c, canonical) {
-  const projects = (c.projects || []).filter(p => !p.hidden);
   const person = c.person || {};
-  const links = (c.contact?.links || []).filter(l => l && l.url).map(l => l.url);
-  const services = (c.about?.lists || []).flatMap(l => (l.items || []).map(i => i.name)).filter(Boolean);
+  const name = person.name || c.brand?.name;
+  const url = `${canonical}/`;
+  const ids = { person: `${canonical}/#pessoa`, site: `${canonical}/#site`, page: `${canonical}/#pagina` };
+  const image = c.seo?.ogImage ? abs(c.seo.ogImage, canonical) : undefined;
+  const desc = plain(c.seo?.description) || plain(c.hero?.lede);
+  const modified = c.savedAt ? String(c.savedAt) : undefined;
+  const links = [...new Set((c.contact?.links || []).map(l => l && l.url).filter(u => /^https?:\/\//i.test(u || '')))];
+  const services = [...new Set((c.about?.lists || []).flatMap(l => (l.items || []).map(i => i && i.name)).filter(Boolean))];
+
+  const personNode = {
+    '@type': 'Person',
+    '@id': ids.person,
+    name,
+    alternateName: person.alternateName || undefined,
+    jobTitle: person.jobTitle || undefined,
+    description: desc || undefined,
+    url,
+    image,
+    email: c.contact?.email ? `mailto:${c.contact.email}` : undefined,
+    sameAs: links.length ? links : undefined,
+    knowsAbout: services.length ? services : undefined,
+    hasOccupation: person.jobTitle ? {
+      '@type': 'Occupation',
+      name: person.jobTitle,
+      occupationLocation: person.city ? { '@type': 'City', name: person.city } : undefined,
+      skills: services.length ? services.join(', ') : undefined,
+    } : undefined,
+    address: (person.city || person.state) ? {
+      '@type': 'PostalAddress',
+      addressLocality: person.city || undefined,
+      addressRegion: person.state || undefined,
+      addressCountry: person.country || 'BR',
+    } : undefined,
+  };
+
+  // o Google só aproveita vídeos com nome, capa, data e endereço do vídeo
+  const video = p => {
+    const thumb = posterOf(p);
+    const yt = ytId(p.youtube);
+    const contentUrl = p.video ? abs(p.video, canonical) : undefined;
+    const embedUrl = p.video ? undefined
+      : p.vimeo ? `https://player.vimeo.com/video/${p.vimeo}`
+      : yt ? `https://www.youtube.com/embed/${yt}` : undefined;
+    const uploadDate = p.year ? `${p.year}-01-01` : modified ? modified.slice(0, 10) : undefined;
+    if (!p.title || !thumb || !uploadDate || !(contentUrl || embedUrl)) return null;
+    return {
+      '@type': 'VideoObject',
+      name: p.title,
+      description: plain(p.description) || p.title,
+      thumbnailUrl: abs(thumb, canonical),
+      uploadDate,
+      duration: iso8601(p.duration),
+      contentUrl,
+      embedUrl,
+      genre: p.tag || undefined,
+      creator: { '@id': ids.person },
+    };
+  };
+  const artwork = p => {
+    const img = posterOf(p);
+    if (!p.title || !img) return null;
+    return {
+      '@type': 'CreativeWork',
+      name: p.title,
+      description: plain(p.description) || undefined,
+      image: abs(img, canonical),
+      dateCreated: p.year ? String(p.year) : undefined,
+      genre: p.tag || undefined,
+      creator: { '@id': ids.person },
+    };
+  };
+  const list = (id, title, items) => items.length ? {
+    '@type': 'ItemList',
+    '@id': `${canonical}/#${id}`,
+    name: title,
+    numberOfItems: items.length,
+    itemListElement: items.slice(0, 30).map((item, i) => ({ '@type': 'ListItem', position: i + 1, item })),
+  } : null;
+
+  const videos = (c.projects || []).filter(p => p && !p.hidden).map(video).filter(Boolean);
+  const artworks = (c.designs || []).filter(p => p && !p.hidden).map(artwork).filter(Boolean);
 
   const graph = [
     {
-      '@type': 'Person',
-      '@id': `${canonical}/#pessoa`,
-      name: person.name || c.brand?.name,
-      jobTitle: person.jobTitle || undefined,
-      description: plain(c.hero?.lede) || plain(c.seo?.description),
-      url: `${canonical}/`,
-      image: c.seo?.ogImage ? abs(c.seo.ogImage, canonical) : undefined,
-      email: c.contact?.email ? `mailto:${c.contact.email}` : undefined,
-      sameAs: links.length ? links : undefined,
-      knowsAbout: services.length ? services : undefined,
-      address: (person.city || person.state) ? {
-        '@type': 'PostalAddress',
-        addressLocality: person.city || undefined,
-        addressRegion: person.state || undefined,
-        addressCountry: person.country || 'BR',
-      } : undefined,
-    },
-    {
       '@type': 'WebSite',
-      '@id': `${canonical}/#site`,
-      url: `${canonical}/`,
-      name: c.seo?.title,
-      description: plain(c.seo?.description),
+      '@id': ids.site,
+      url,
+      name: name || c.seo?.title,
+      alternateName: [c.seo?.title, hostOf(canonical)].filter(Boolean),
+      description: desc || undefined,
       inLanguage: 'pt-BR',
-      publisher: { '@id': `${canonical}/#pessoa` },
+      publisher: { '@id': ids.person },
     },
     {
-      '@type': 'ItemList',
-      name: plain(c.works?.title) || 'Trabalhos',
-      numberOfItems: projects.length,
-      itemListElement: projects.slice(0, 30).map((p, i) => ({
-        '@type': 'ListItem',
-        position: i + 1,
-        item: {
-          '@type': 'VideoObject',
-          name: p.title,
-          description: p.description || p.title,
-          thumbnailUrl: p.poster ? abs(p.poster, canonical) : undefined,
-          uploadDate: p.year ? `${p.year}-01-01` : undefined,
-          duration: iso8601(p.duration),
-          contentUrl: p.video ? abs(p.video, canonical) : undefined,
-          embedUrl: !p.video && p.vimeo ? `https://player.vimeo.com/video/${p.vimeo}` : undefined,
-          creator: { '@id': `${canonical}/#pessoa` },
-        },
-      })),
+      // página de perfil: diz ao Google que este site É a apresentação dessa pessoa
+      '@type': 'ProfilePage',
+      '@id': ids.page,
+      url,
+      name: c.seo?.title || name,
+      description: desc || undefined,
+      inLanguage: 'pt-BR',
+      isPartOf: { '@id': ids.site },
+      dateModified: modified,
+      primaryImageOfPage: image ? { '@type': 'ImageObject', url: image } : undefined,
+      mainEntity: personNode,
     },
-  ];
-  return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph });
+    list('trabalhos', plain(c.works?.title) || 'Trabalhos', videos),
+    list('design', plain(c.design?.title) || 'Design & 3D', artworks),
+  ].filter(Boolean);
+
+  // "</" dentro do JSON fecharia a tag <script> antes da hora
+  return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(/</g, '\\u003c');
 }
 
 /* ── monta a página ───────────────────────────────────── */
@@ -228,16 +295,39 @@ export function renderPage(shell, published, origin, defaults) {
   html = html.replace(/(<meta property="og:image" content=")[^"]*(")/, `$1${esc(img)}$2`);
   if (c.theme?.ink) html = html.replace(/(<meta name="theme-color" content=")[^"]*(")/, `$1${esc(c.theme.ink)}$2`);
 
-  const headExtra = `
-<link rel="canonical" href="${esc(canonical)}/">
-<meta property="og:url" content="${esc(canonical)}/">
-<meta property="og:site_name" content="${esc(c.brand?.name || title)}">
-<meta property="og:locale" content="pt_BR">
-<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
-${c.person?.name ? `<meta name="author" content="${esc(c.person.name)}">` : ''}
-<script type="application/ld+json">${jsonLd(c, canonical)}</script>
-<noscript><style>.loader{display:none}.card,[data-reveal]{opacity:1!important;transform:none!important}</style></noscript>
-`;
+  const person = c.person || {};
+  const who = person.name || c.brand?.name || title;
+  const imgAlt = person.jobTitle ? `${who} — ${person.jobTitle}` : who;
+  const ownOg = /(^|\/)assets\/og\//.test(String(c.seo?.ogImage || ''));
+  const keywords = keywordList(c.seo?.keywords);
+  const google = verifyCode(c.seo?.googleVerification);
+  const bing = verifyCode(c.seo?.bingVerification);
+  const region = person.state ? `${person.country || 'BR'}-${person.state}` : '';
+  const tags = [
+    `<link rel="canonical" href="${esc(canonical)}/">`,
+    `<link rel="alternate" hreflang="pt-BR" href="${esc(canonical)}/">`,
+    `<link rel="alternate" hreflang="x-default" href="${esc(canonical)}/">`,
+    `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">`,
+    `<meta name="author" content="${esc(who)}">`,
+    keywords.length && `<meta name="keywords" content="${esc(keywords.join(', '))}">`,
+    region && `<meta name="geo.region" content="${esc(region)}">`,
+    person.city && `<meta name="geo.placename" content="${esc(person.city)}">`,
+    google && `<meta name="google-site-verification" content="${esc(google)}">`,
+    bing && `<meta name="msvalidate.01" content="${esc(bing)}">`,
+    `<meta property="og:url" content="${esc(canonical)}/">`,
+    `<meta property="og:site_name" content="${esc(who)}">`,
+    `<meta property="og:locale" content="pt_BR">`,
+    img && `<meta property="og:image:alt" content="${esc(imgAlt)}">`,
+    img && ownOg && `<meta property="og:image:width" content="1200">`,
+    img && ownOg && `<meta property="og:image:height" content="630">`,
+    `<meta name="twitter:title" content="${esc(title)}">`,
+    `<meta name="twitter:description" content="${esc(desc)}">`,
+    img && `<meta name="twitter:image" content="${esc(img)}">`,
+    img && `<meta name="twitter:image:alt" content="${esc(imgAlt)}">`,
+    `<script type="application/ld+json">${jsonLd(c, canonical)}</script>`,
+    `<noscript><style>.loader{display:none}.card,[data-reveal]{opacity:1!important;transform:none!important}</style></noscript>`,
+  ].filter(Boolean);
+  const headExtra = '\n' + tags.join('\n') + '\n';
   html = html.replace('</head>', headExtra + '</head>');
 
   const navItems = (c.nav?.items || []).filter(i => i && i.label);
@@ -268,4 +358,4 @@ ${c.person?.name ? `<meta name="author" content="${esc(c.person.name)}">` : ''}
   return html;
 }
 
-export { merge, plain, esc };
+export { merge, plain, esc, posterOf, migrate };

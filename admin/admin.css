@@ -373,3 +373,20 @@ select{
 .blk-add{ display:flex; flex-direction:column; gap:8px; padding:12px; border:1.5px dashed var(--line-2); border-radius:12px }
 .blk-add__btns{ display:flex; flex-wrap:wrap; gap:6px }
 .mitem__file{ width:100%; aspect-ratio:16/9; display:grid; place-items:center; background:var(--panel-3); font-family:var(--m); letter-spacing:.14em; color:var(--acc) }
+
+/* ── prévia no Google ── */
+.serp{
+  display:flex; flex-direction:column; gap:4px; padding:16px 18px; border-radius:12px;
+  background:#fff; color:#202124; font-family:Arial, sans-serif; max-width:640px;
+}
+.serp__cap{ color:#70757a; margin-bottom:6px; font-size:.6rem }
+.serp__site{ display:flex; align-items:center; gap:10px; margin-bottom:4px }
+.serp__ico{ width:26px; height:26px; border-radius:50%; flex:none; border:1px solid #ecedef }
+.serp__n{ font-size:14px; color:#202124; line-height:1.2 }
+.serp__u{ font-size:12px; color:#4d5156; line-height:1.3 }
+.serp__t{ font-size:20px; line-height:1.3; color:#1a0dab }
+.serp__d{ font-size:14px; line-height:1.58; color:#4d5156 }
+.serp__c{ display:flex; gap:14px; margin-top:8px; font-size:.64rem }
+.serp__c .is-ok{ color:#188038 }
+.serp__c .is-low{ color:#b06000 }
+.serp__c .is-warn{ color:#d93025 }

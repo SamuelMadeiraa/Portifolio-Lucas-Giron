@@ -1476,10 +1476,17 @@ function viewGeneral() {
       field(d.works, 'title', { label: 'Título', rows: 2, hint: 'Pule linha para quebrar o título.' }),
       field(d.works, 'subtitle', { label: 'Subtítulo' })),
     box('Google e compartilhamento', 'Como o site aparece nos resultados de busca e quando o link é enviado no WhatsApp, Instagram etc.',
-      field(d.seo, 'title', { label: 'Título da página', hint: 'Até ~60 caracteres. Comece pelo nome e diga o que você faz.' }),
-      field(d.seo, 'description', { label: 'Descrição', rows: 3, hint: 'Até ~155 caracteres. É o texto que aparece embaixo do título no Google.' }),
-      field(d.seo, 'siteUrl', { label: 'Endereço oficial do site', placeholder: 'https://lucasgiron.com.br', hint: 'Evita que o Google trate os endereços alternativos como sites diferentes.' }),
+      serpPreview(d.seo),
+      field(d.seo, 'title', { label: 'Título da página', hint: 'Até ~60 caracteres. Comece pelo nome e diga o que você faz.', onChange: () => serpPreview.refresh?.() }),
+      field(d.seo, 'description', { label: 'Descrição', rows: 3, hint: 'Até ~155 caracteres. É o texto que aparece embaixo do título no Google.', onChange: () => serpPreview.refresh?.() }),
+      field(d.seo, 'siteUrl', { label: 'Endereço oficial do site', placeholder: 'https://lucasgiron.com.br', hint: 'Evita que o Google trate os endereços alternativos como sites diferentes.', onChange: () => serpPreview.refresh?.() }),
+      field(d.seo, 'keywords', { label: 'Palavras-chave', rows: 2, placeholder: 'Lucas Giron, motion designer, animador gráfico…', hint: 'Separadas por vírgula. O Google dá pouco peso; o que mais conta é esses termos aparecerem nos textos do site.' }),
       imageEditor(d.seo, 'ogImage', { label: 'Imagem de compartilhamento (1200 × 630)', name: 'compartilhamento' })),
+    box('Verificação dos buscadores', 'Prova para o Google e o Bing que o site é seu — libera os relatórios de busca e o envio do mapa do site.',
+      field(d.seo, 'googleVerification', { label: 'Google Search Console', placeholder: 'código ou a tag <meta … inteira>',
+        hint: 'No Search Console: adicionar propriedade → Prefixo do URL → Tag HTML. Pode colar a tag inteira.' }),
+      field(d.seo, 'bingVerification', { label: 'Bing Webmaster Tools', placeholder: 'código ou a tag <meta … inteira>',
+        hint: 'Opcional. O Bing também pode importar tudo direto do Search Console.' })),
     box('Google Analytics', 'Conta as visitas do site e os cliques no WhatsApp, nas redes, no e-mail e nos projetos.',
       field(d.analytics, 'gaId', { label: 'ID da métrica', placeholder: 'G-XXXXXXXXXX',
         hint: 'No Google Analytics: Administrador → Fluxos de dados → seu site → “ID da métrica”. Deixe vazio para desligar.' })),
@@ -1492,6 +1499,40 @@ function viewGeneral() {
         field(d.person, 'state', { label: 'Estado (sigla)', placeholder: 'SC' }),
         field(d.person, 'country', { label: 'País (sigla)', placeholder: 'BR' })),
       tip('As redes sociais da aba ', h('strong', {}, 'Contato & rodapé'), ' entram automaticamente aqui, confirmando ao Google que os perfis e o site são da mesma pessoa.')));
+}
+
+/* prévia de como o site aparece no Google, com contagem de caracteres */
+function serpPreview(seo) {
+  const clean = s => String(s || '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/\s+/g, ' ').trim();
+  const cut = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
+  const name = h('div', { class: 'serp__n' });
+  const url = h('div', { class: 'serp__u' });
+  const title = h('div', { class: 'serp__t' });
+  const desc = h('div', { class: 'serp__d' });
+  const count = h('div', { class: 'serp__c mono' });
+  const rate = (n, low, high) => (n > high ? 'is-warn' : n < low ? 'is-low' : 'is-ok');
+
+  const paint = () => {
+    const t = clean(seo.title), d = clean(seo.description);
+    let host = location.host;
+    try { host = new URL(seo.siteUrl).host; } catch {}
+    name.textContent = S.draft?.person?.name || S.draft?.brand?.name || host;
+    url.textContent = `https://${host}`;
+    title.textContent = cut(t || 'Título da página', 62);
+    desc.textContent = cut(d || 'Descrição da página.', 158);
+    count.replaceChildren(
+      h('span', { class: rate(t.length, 30, 60) }, `Título: ${t.length}/60`),
+      h('span', { class: rate(d.length, 70, 155) }, `Descrição: ${d.length}/155`));
+  };
+  serpPreview.refresh = paint;
+  paint();
+
+  return h('div', { class: 'serp' },
+    h('div', { class: 'serp__cap mono' }, 'PRÉVIA NO GOOGLE'),
+    h('div', { class: 'serp__site' },
+      h('img', { class: 'serp__ico', src: '/favicon.svg', alt: '' }),
+      h('div', {}, name, url)),
+    title, desc, count);
 }
 
 /* ── Senha ── */

@@ -39,8 +39,13 @@ window.SITE_DEFAULT = {
   seo: {
     title: 'Lucas Giron — Motion Designer e Animador Gráfico em Florianópolis',
     description: 'Motion designer e animador gráfico em Florianópolis. Aberturas, vinhetas e pacotes gráficos para TV e streaming — NBA Brasil, Amazon Prime Video, ALESC.',
-    ogImage: 'assets/thumbs/764150238.jpg',
+    ogImage: 'assets/og/lucas-giron.jpg',
     siteUrl: 'https://lucasgiron.com.br',
+    // termos que descrevem o trabalho (o Google usa pouco; outros buscadores, mais)
+    keywords: 'Lucas Giron, motion designer, animador gráfico, motion design Florianópolis, animação 2D, vinheta, abertura para TV, pacote gráfico, broadcast design',
+    // códigos de verificação do Google Search Console e do Bing Webmaster Tools
+    googleVerification: '',
+    bingVerification: '',
   },
 
   // Google Analytics 4 — ID da métrica (G-XXXXXXXXXX). Vazio = desligado.
