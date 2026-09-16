@@ -11,9 +11,10 @@
 #>
 param(
   [string]$Root   = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
-  [string]$Accent = '#FF3B00',
-  [string]$Ink    = '#08080A',
-  [string]$Paper  = '#F2F0EA',
+  [string]$Accent = '#B6FF00',
+  [string]$OnAccent = '#0A0A0A',
+  [string]$Ink    = '#080A08',
+  [string]$Paper  = '#EEF3EA',
   [string]$Name1  = 'LUCAS',
   [string]$Name2  = 'GIRON',
   [string]$Role   = 'MOTION DESIGNER  ·  ANIMADOR GRÁFICO',
@@ -25,6 +26,7 @@ Add-Type -AssemblyName System.Drawing
 $accentC = [System.Drawing.ColorTranslator]::FromHtml($Accent)
 $inkC    = [System.Drawing.ColorTranslator]::FromHtml($Ink)
 $paperC  = [System.Drawing.ColorTranslator]::FromHtml($Paper)
+$onC     = [System.Drawing.ColorTranslator]::FromHtml($OnAccent)
 
 function Get-Font([float]$px, [string[]]$names) {
   foreach ($n in $names) {
@@ -71,7 +73,7 @@ function Get-Png([int]$size, [double]$pad) {
   $m.Scale($scale, $scale)
   $m.Translate(-($b.X + $b.Width / 2), -($b.Y + $b.Height / 2))
   $path.Transform($m)
-  $g.FillPath([System.Drawing.Brushes]::White, $path)
+  $g.FillPath((New-Object System.Drawing.SolidBrush($onC)), $path)
   $g.Dispose()
 
   $ms = New-Object IO.MemoryStream
@@ -132,7 +134,7 @@ $mb = $mark.GetBounds()
 $mm = New-Object System.Drawing.Drawing2D.Matrix
 $mm.Translate($L + 27 - ($mb.X + $mb.Width / 2), 89 - ($mb.Y + $mb.Height / 2))
 $mark.Transform($mm)
-$g.FillPath([System.Drawing.Brushes]::White, $mark)
+$g.FillPath((New-Object System.Drawing.SolidBrush($onC)), $mark)
 $monoF = Get-Font 22 $MONO
 $dim = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(150, $paperC))
 $g.DrawString($Domain, $monoF, $dim, $L + 76, 75)

@@ -169,7 +169,9 @@ function jsonLd(c, canonical) {
   const image = c.seo?.ogImage ? abs(c.seo.ogImage, canonical) : undefined;
   const desc = plain(c.seo?.description) || plain(c.hero?.lede);
   const modified = c.savedAt ? String(c.savedAt) : undefined;
-  const links = [...new Set((c.contact?.links || []).map(l => l && l.url).filter(u => /^https?:\/\//i.test(u || '')))];
+  // sameAs é só para perfis (Instagram, Vimeo, LinkedIn…), não para links de conversa
+  const isProfile = u => /^https?:\/\//i.test(u || '') && !/(^|\.)(whatsapp\.com|wa\.me|t\.me)$/i.test(hostOf(u));
+  const links = [...new Set((c.contact?.links || []).map(l => l && l.url).filter(isProfile))];
   const services = [...new Set((c.about?.lists || []).flatMap(l => (l.items || []).map(i => i && i.name)).filter(Boolean))];
 
   const personNode = {
