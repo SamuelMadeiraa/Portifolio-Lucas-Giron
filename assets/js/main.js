@@ -130,31 +130,75 @@ const socialUrl = u => {
   return safeUrl(s);
 };
 
-/* Google Analytics 4: carrega uma vez só, fora do localhost e da prévia do painel */
-let gaStarted = false;
-function startAnalytics(id) {
-  id = String(id || '').trim().toUpperCase();
-  if (gaStarted || !/^G-[A-Z0-9]{4,20}$/.test(id)) return;
-  if (/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || window.top !== window) return;
-  gaStarted = true;
-  window.dataLayer = window.dataLayer || [];
-  window.gtag = function () { dataLayer.push(arguments); };
-  gtag('js', new Date());
-  gtag('config', id);
-  const s = document.createElement('script');
-  s.async = true;
-  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
-  document.head.append(s);
+/* Métricas: o contador próprio (/api/track → relatório do painel) e, se tiver ID,
+   o Google Analytics 4. Liga uma vez só — nunca no localhost, na prévia do painel,
+   dentro de iframe nem no navegador marcado pelo painel como "não contar". */
+let metricsOn = false;
+const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+             set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
-  // cliques que interessam: WhatsApp, redes, e-mail e vídeos
+// id anônimo e aleatório só para contar pessoas diferentes (nada pessoal)
+function visitorId() {
+  let v = ls.get('giron:vid');
+  if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); ls.set('giron:vid', v); }
+  return v;
+}
+// de onde a pessoa veio: utm_source do link ou o site anterior
+function referrerSource() {
+  const utm = new URLSearchParams(location.search).get('utm_source');
+  if (utm) return utm;
+  try {
+    const host = new URL(document.referrer).hostname;
+    return host === location.hostname ? '' : host;
+  } catch { return ''; }
+}
+function track(data) {
+  const body = JSON.stringify({ ...data, v: visitorId() });
+  // sendBeacon sobrevive à troca de página (clique em link externo)
+  if (!(navigator.sendBeacon && navigator.sendBeacon('/api/track', new Blob([body], { type: 'text/plain' }))))
+    fetch('/api/track', { method: 'POST', body, keepalive: true }).catch(() => {});
+}
+
+function startMetrics(gaId) {
+  if (metricsOn || window.top !== window || navigator.webdriver) return;
+  if (/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || PREVIEW || ls.get('giron:notrack') === '1') return;
+  metricsOn = true;
+
+  gaId = String(gaId || '').trim().toUpperCase();
+  const ga = /^G-[A-Z0-9]{4,20}$/.test(gaId);
+  if (ga) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { dataLayer.push(arguments); };
+    gtag('js', new Date());
+    gtag('config', gaId);
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(gaId);
+    document.head.append(s);
+  }
+
+  // uma visita por sessão (fechar a aba e voltar depois conta de novo)
+  let counted = false;
+  try { counted = sessionStorage.getItem('giron:visit') === '1'; sessionStorage.setItem('giron:visit', '1'); } catch {}
+  if (!counted) track({ t: 'visit', r: referrerSource() });
+
+  // cliques que interessam: WhatsApp, redes, e-mail e projetos
   document.addEventListener('click', e => {
     const el = e.target.closest('#waFloat, #contactMail, .clink, .soc, #drawerFoot a, [data-play], [data-case]');
     if (!el) return;
-    const ev = el.id === 'waFloat' ? ['whatsapp_flutuante', {}]
-      : el.id === 'contactMail' ? ['clique_email', {}]
-      : el.matches('[data-play], [data-case]') ? ['abrir_projeto', { projeto: el.querySelector('.card__t')?.textContent?.trim() || el.textContent.trim().slice(0, 60) }]
-      : ['clique_rede', { rede: iconKey(el.href || '') }];
-    gtag('event', ev[0], ev[1]);
+    if (el.matches('[data-play], [data-case]')) {
+      const projeto = el.querySelector('.card__t')?.textContent?.trim() || el.textContent.trim().slice(0, 60);
+      track({ t: 'click', k: 'projeto', p: projeto });
+      if (ga) gtag('event', 'abrir_projeto', { projeto });
+      return;
+    }
+    const rede = el.id === 'waFloat' ? 'whatsapp' : el.id === 'contactMail' ? 'mail' : iconKey(el.href || '');
+    track({ t: 'click', k: rede });
+    if (ga) {
+      if (el.id === 'waFloat') gtag('event', 'whatsapp_flutuante', {});
+      else if (el.id === 'contactMail') gtag('event', 'clique_email', {});
+      else gtag('event', 'clique_rede', { rede });
+    }
   }, true);
 }
 
@@ -297,7 +341,7 @@ function applyContent(){
   document.body.classList.toggle('no-vignette', fx.vignette === false);
 
   applyFonts(c.typography || {});
-  startAnalytics(c.analytics?.gaId);
+  startMetrics(c.analytics?.gaId);
 
   if (c.seo) {
     if (c.seo.title) document.title = c.seo.title;

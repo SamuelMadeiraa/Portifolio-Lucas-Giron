@@ -47,6 +47,23 @@ tools/dev-server.ps1    ← servidor local que imita a API (não vai para o depl
 
 Trocar a `ADMIN_PASSWORD` desconecta todas as sessões abertas.
 
+## Relatório de visitas (contador próprio)
+
+A aba **Relatório** do painel mostra pessoas, visitas por dia, estados, cidades, de onde
+vieram e os cliques nas redes / WhatsApp / e-mail / projetos — contados pelo próprio site,
+sem Google. O Google Analytics (ID na aba Geral & SEO) continua opcional e independente.
+
+Ligar, uma vez só: na Vercel → **Storage → Create Database → Upstash for Redis** (plano
+**Free**), conecte ao projeto e faça um novo deploy (cria `KV_REST_API_URL` e
+`KV_REST_API_TOKEN`).
+
+- O site chama `/api/track` uma vez por sessão (visita) e a cada clique que interessa.
+  Cidade e estado vêm dos cabeçalhos de geolocalização da Vercel; nenhum IP é guardado.
+- Pessoas diferentes = id aleatório no navegador (`localStorage`), contado em HyperLogLog.
+- Não conta robôs, localhost, a prévia do painel nem navegadores marcados em
+  "Não contar minhas visitas" (na própria aba Relatório).
+- Localmente, um `.dev-data/report.json` com dados de exemplo simula o relatório.
+
 ## Trocar a senha
 
 Depois de entrar, o painel tem a aba **Senha**: informe a senha atual, a nova (mínimo de

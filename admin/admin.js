@@ -524,7 +524,8 @@ function mediaEditor(obj, { name: nameOpt = 'video', onMedia } = {}) {
    ABAS
    ───────────────────────────────────────────── */
 const TABS = [
-  { id: 'projects', icon: '▦', label: 'Projetos',              hint: 'Adicione, edite, reordene, oculte ou exclua trabalhos. Cada projeto pode ter uma página com vídeos, antes e depois, galerias, 3D…', render: viewProjects },
+  { id: 'report',   icon: '◔', label: 'Relatório',             hint: 'Quantas pessoas visitaram o site, de onde são e onde clicaram.', render: viewReport },
+  { id: 'projects', icon: '▦', label: 'Projetos',             hint: 'Adicione, edite, reordene, oculte ou exclua trabalhos. Cada projeto pode ter uma página com vídeos, antes e depois, galerias, 3D…', render: viewProjects },
   { id: 'designs',  icon: '◈', label: 'Design & 3D',           hint: 'Trabalhos que não são vídeo: identidade visual, fotos, antes e depois, modelos 3D e PDFs.', render: viewDesigns },
   { id: 'categories', icon: '#', label: 'Categorias',          hint: 'Os filtros dos projetos: crie, renomeie, reordene e exclua.', render: viewCategories },
   { id: 'sections', icon: '☰', label: 'Seções & menu',         hint: 'Ordem das seções, seções novas e os links do menu.', render: viewSections },
@@ -1573,6 +1574,116 @@ function viewPassword() {
       msg),
     tip('A senha fica guardada embaralhada (hash), nunca em texto puro, nem no código nem no repositório.'),
     tip('Esqueceu a senha? Apague o arquivo que começa com ', h('strong', {}, 'site/auth-'), ' em Vercel → Storage → Blob: a senha volta a ser a da variável ', h('strong', {}, 'ADMIN_PASSWORD'), '.'));
+}
+
+/* ── Relatório (contador próprio do site) ── */
+const NET_NAMES = {
+  instagram: 'Instagram', youtube: 'YouTube', vimeo: 'Vimeo', whatsapp: 'WhatsApp', linkedin: 'LinkedIn',
+  behance: 'Behance', tiktok: 'TikTok', x: 'X (Twitter)', facebook: 'Facebook', github: 'GitHub',
+  dribbble: 'Dribbble', spotify: 'Spotify', telegram: 'Telegram', pinterest: 'Pinterest',
+  mail: 'E-mail', phone: 'Telefone', link: 'Outros links',
+  google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo', direto: 'Direto / link salvo',
+};
+const fmtNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
+S.reportDays = 28;
+
+// "não contar minhas visitas": o site lê essa marca no mesmo navegador
+const noTrack = {
+  get: () => { try { return localStorage.getItem('giron:notrack') === '1'; } catch { return false; } },
+  set: on => { try { on ? localStorage.setItem('giron:notrack', '1') : localStorage.removeItem('giron:notrack'); } catch {} },
+};
+
+function viewReport() {
+  const body = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Carregando…'));
+  const updated = h('span', { class: 'muted' });
+  const periods = h('div', { class: 'seg' }, [7, 28, 90].map(d =>
+    h('button', { type: 'button', class: d === S.reportDays ? 'is-on' : null, onclick: e => {
+      S.reportDays = d;
+      periods.querySelectorAll('button').forEach(b => b.classList.toggle('is-on', b === e.currentTarget));
+      load();
+    } }, `${d} dias`)));
+  const me = h('input', { type: 'checkbox', class: 'toggle' });
+  me.checked = noTrack.get();
+  me.addEventListener('change', () => {
+    noTrack.set(me.checked);
+    toast(me.checked ? 'Suas visitas neste navegador não serão contadas.' : 'Suas visitas neste navegador voltam a ser contadas.', 'ok');
+  });
+  const toolbar = h('div', { class: 'toolbar' }, periods,
+    h('button', { type: 'button', class: 'b b--ghost b--sm', onclick: () => load() }, 'Atualizar'), updated);
+
+  // lista com barra proporcional ao maior valor
+  const bars = (items, empty) => {
+    if (!items.length) return h('p', { class: 'empty' }, empty);
+    const max = Math.max(...items.map(i => i.value), 1);
+    return h('ol', { class: 'rbars' }, items.map(i => h('li', { class: 'rbar', style: `--w:${(i.value / max * 100).toFixed(1)}%` },
+      h('span', { class: 'rbar__n' }, i.label, i.sub && h('small', {}, ' · ' + i.sub)),
+      h('span', { class: 'rbar__v mono' }, fmtNum(i.value)))));
+  };
+  const kpi = (label, value, sub) => h('div', { class: 'kpi' },
+    h('span', { class: 'f__l' }, label), h('strong', {}, fmtNum(value)), sub && h('small', { class: 'muted' }, sub));
+
+  const setup = () => box('Ligar o contador de visitas',
+    'O site conta sozinho as visitas, de onde as pessoas são e os cliques nas redes — sem Google. Só falta um lugar para guardar os números (grátis):',
+    h('ol', { class: 'steps' },
+      h('li', {}, 'Na Vercel, abra o projeto do site → aba ', h('strong', {}, 'Storage'), ' → ', h('strong', {}, 'Create Database'), '.'),
+      h('li', {}, 'Escolha ', h('strong', {}, 'Upstash for Redis'), ' (Marketplace), região ', h('strong', {}, 'São Paulo'), ' se tiver, e o plano ', h('strong', {}, 'Free'), '.'),
+      h('li', {}, 'Conecte o banco a este projeto (Production). Isso cria as variáveis ', h('code', {}, 'KV_REST_API_URL'), ' e ', h('code', {}, 'KV_REST_API_TOKEN'), '.'),
+      h('li', {}, 'Faça um novo deploy. A partir daí cada visita já entra aqui.')),
+    tip('O plano grátis aguenta com folga um portfólio: cada visita usa uns 5 comandos de 500 mil por mês.'));
+
+  const render = r => {
+    const t = r.totals;
+    const daily = r.daily || [];
+    const maxDay = Math.max(...daily.map(d => d.visits), 1);
+    const day = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'UTC' });
+    updated.textContent = r.updatedAt ? `Atualizado ${fmtDate(r.updatedAt)}` : '';
+
+    body.replaceChildren(
+      h('div', { class: 'kpis' },
+        kpi('Pessoas', t.people, 'visitantes diferentes'),
+        kpi('Visitas', t.visits, 'cada vez que alguém abre o site'),
+        kpi('Cliques nas redes', t.clicks, 'redes, WhatsApp e e-mail'),
+        kpi('Projetos abertos', t.projects)),
+
+      box('Visitas por dia', null,
+        t.visits
+          ? h('div', { class: 'rchart', role: 'img', 'aria-label': 'Visitas por dia' }, daily.map(d =>
+              h('span', { class: 'rchart__c', style: `--h:${(d.visits / maxDay * 100).toFixed(1)}%`,
+                title: `${day.format(new Date(d.date))}: ${fmtNum(d.visits)} visita(s)` })))
+          : h('p', { class: 'empty' }, 'Nenhuma visita no período ainda.')),
+
+      h('div', { class: 'rgrid' },
+        box('Estados', 'Visitas por estado (de fora do Brasil, por país).',
+          bars((r.regions || []).map(x => ({ label: x.name, sub: x.sub, value: x.count })), 'Sem visitas no período.')),
+        box('Cidades', 'Visitas por cidade.',
+          bars((r.cities || []).map(x => ({ label: x.name, sub: x.sub, value: x.count })), 'Sem visitas no período.'))),
+
+      h('div', { class: 'rgrid' },
+        box('Cliques nas redes', 'Quantas vezes clicaram e quantas pessoas diferentes.',
+          bars((r.clicks || []).map(c => ({ label: NET_NAMES[c.kind] || c.kind, sub: `${fmtNum(c.people)} pessoa(s)`, value: c.count })),
+            'Nenhum clique nas redes no período.')),
+        box('De onde vieram', 'O site em que a pessoa estava antes (ou o utm_source do link).',
+          bars((r.sources || []).map(s => ({ label: NET_NAMES[s.name] || s.name, value: s.count })), 'Sem visitas no período.'))),
+
+      box('Projetos mais abertos', null,
+        bars((r.projects || []).map(p => ({ label: p.name, value: p.count })), 'Nenhum projeto aberto no período.')),
+
+      tip('Não conta robôs, a pré-visualização do painel nem o site rodando no seu computador. A cidade vem da conexão da pessoa e às vezes aponta a cidade vizinha ou a da operadora.'));
+  };
+
+  const load = async () => {
+    let r;
+    try { r = await api('/api/report?days=' + S.reportDays); }
+    catch (e) { body.replaceChildren(h('p', { class: 'err' }, 'Não foi possível carregar o relatório: ' + e.message)); return; }
+    toolbar.hidden = !r.configured;
+    if (!r.configured) body.replaceChildren(setup());
+    else render(r);
+  };
+  load();
+
+  return frag(toolbar, body,
+    h('label', { class: 'f f--toggle' }, me, h('span', { class: 'f__l' }, 'Não contar minhas visitas neste navegador'),
+      h('small', { class: 'f__h' }, 'Ligue em cada aparelho que você usa para ver o site, para os números mostrarem só os visitantes.')));
 }
 
 /* ── Mídias ── */

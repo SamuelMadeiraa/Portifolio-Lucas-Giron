@@ -153,6 +153,10 @@ $Handler = {
       if (Test-Path $Cfg.Content) { Send-Bytes 200 ([IO.File]::ReadAllBytes($Cfg.Content)) 'application/json; charset=utf-8' @{ 'Cache-Control' = 'no-store' } }
       else { Send-Json 404 @{ error = 'empty' } }
     }
+    elseif ($route -eq 'POST /api/track') {
+      # o site não conta visitas no localhost; aqui só responde como a Vercel
+      Send-Bytes 204 ([byte[]]@()) 'text/plain' $null
+    }
     elseif ($path.StartsWith('/api/') -and -not $authed) {
       Send-Json 401 @{ error = 'Não autorizado' }
     }
@@ -184,6 +188,12 @@ $Handler = {
     elseif ($route -eq 'GET /api/versions') {
       $list = @(Get-ChildItem $Cfg.Versions -Filter *.json | Sort-Object LastWriteTime -Descending | ForEach-Object { File-Info $_ '/.dev-data/versions' 'site/versions' })
       Send-Json 200 @{ versions = $list }
+    }
+    elseif ($route -eq 'GET /api/report') {
+      # sem banco localmente: um .dev-data/report.json com dados de exemplo simula o relatório
+      $rep = Join-Path (Split-Path $Cfg.Content) 'report.json'
+      if (Test-Path $rep) { Send-Bytes 200 ([IO.File]::ReadAllBytes($rep)) 'application/json; charset=utf-8' @{ 'Cache-Control' = 'no-store' } }
+      else { Send-Json 200 @{ configured = $false } }
     }
     elseif ($route -eq 'GET /api/media') {
       $list = @(Get-ChildItem $Cfg.Uploads -File | ForEach-Object { File-Info $_ '/.dev-data/uploads' 'media' })
