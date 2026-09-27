@@ -59,6 +59,8 @@ Ligar, uma vez só: na Vercel → **Storage → Create Database → Upstash for 
 
 - O site chama `/api/track` uma vez por sessão (visita) e a cada clique que interessa.
   Cidade e estado vêm dos cabeçalhos de geolocalização da Vercel; nenhum IP é guardado.
+- A cidade do IP costuma ser a vizinha, então o relatório agrupa por região imediata do
+  IBGE (`api/_regioes.js`, gerado da API de localidades do IBGE).
 - Pessoas diferentes = id aleatório no navegador (`localStorage`), contado em HyperLogLog.
 - Não conta robôs, localhost, a prévia do painel nem navegadores marcados em
   "Não contar minhas visitas" (na própria aba Relatório).

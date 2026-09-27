@@ -1655,8 +1655,12 @@ function viewReport() {
       h('div', { class: 'rgrid' },
         box('Estados', 'Visitas por estado (de fora do Brasil, por país).',
           bars((r.regions || []).map(x => ({ label: x.name, sub: x.sub, value: x.count })), 'Sem visitas no período.')),
-        box('Cidades', 'Visitas por cidade.',
-          bars((r.cities || []).map(x => ({ label: x.name, sub: x.sub, value: x.count })), 'Sem visitas no período.'))),
+        box('Regiões', 'Visitas por região (divisão do IBGE). A cidade vem da conexão e costuma ser a vizinha, por isso fica agrupada.',
+          bars((r.areas || []).map(x => {
+            const names = (x.cities || []).map(c => c.name);
+            const more = names.length > 3 ? ` +${names.length - 3}` : '';
+            return { label: x.name, sub: [x.sub, x.name.startsWith('Região') && names.slice(0, 3).join(', ') + more].filter(Boolean).join(' · '), value: x.count };
+          }), 'Sem visitas no período.'))),
 
       h('div', { class: 'rgrid' },
         box('Cliques nas redes', 'Quantas vezes clicaram e quantas pessoas diferentes.',

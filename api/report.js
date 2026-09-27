@@ -1,5 +1,6 @@
 import { isAuthed, json, unauthorized } from './_lib.js';
 import { statsConfigured, redis, lastDays, key, KINDS, BR_STATES } from './_stats.js';
+import { regionOf } from './_regioes.js';
 
 /* GET /api/report?days=28 → relatório do contador próprio para o painel:
    pessoas, visitas por dia, estados, cidades, origem e cliques. */
@@ -27,6 +28,30 @@ const top = (map, label, n = 50) => {
   }
   return [...acc.values()].sort((a, b) => b.count - a.count).slice(0, n);
 };
+
+/* Cidades agrupadas pela região imediata do IBGE: a cidade que vem da conexão
+   (IP) costuma ser a vizinha — São José aparece como Santo Amaro, por exemplo —,
+   mas a região acerta. Fora do Brasil, fica a cidade mesmo. */
+function areas(cityMap) {
+  const acc = new Map();
+  for (const [k, v] of cityMap) {
+    const [city, cc, uf] = k.split('|');
+    const region = cc === 'BR' ? regionOf(uf, city) : null;
+    const id = region ? `BR|${uf}|${region}` : k;
+    const cur = acc.get(id) || {
+      name: region ? `Região de ${region}` : city,
+      sub: cc === 'BR' ? uf : countryName(cc),
+      count: 0, cities: new Map(),
+    };
+    cur.count += v;
+    cur.cities.set(city, (cur.cities.get(city) || 0) + v);
+    acc.set(id, cur);
+  }
+  return [...acc.values()].sort((a, b) => b.count - a.count).slice(0, 50).map(a => ({
+    ...a,
+    cities: [...a.cities].sort((x, y) => y[1] - x[1]).map(([name, count]) => ({ name, count })),
+  }));
+}
 
 const cache = new Map();
 
@@ -72,10 +97,7 @@ export async function GET(request) {
           ? { id: 'BR|' + uf, name: BR_STATES[uf] || 'Brasil (estado não identificado)', sub: '' }
           : { id: cc, name: countryName(cc), sub: 'exterior' };
       }),
-      cities: top(H.city, k => {
-        const [city, cc, uf] = k.split('|');
-        return { id: k, name: city, sub: cc === 'BR' ? uf : countryName(cc) };
-      }),
+      areas: areas(H.city),
       sources: top(H.ref, k => ({ id: k, name: k })),
       clicks,
       projects,
