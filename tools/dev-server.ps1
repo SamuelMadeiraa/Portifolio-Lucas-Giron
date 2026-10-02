@@ -33,7 +33,7 @@ $Handler = {
   $Utf8  = New-Object System.Text.UTF8Encoding $false
   $Types = @{
     '.html'='text/html; charset=utf-8'; '.css'='text/css; charset=utf-8'; '.js'='application/javascript; charset=utf-8'
-    '.json'='application/json; charset=utf-8'; '.svg'='image/svg+xml'; '.ico'='image/x-icon'
+    '.json'='application/json; charset=utf-8'; '.webmanifest'='application/manifest+json; charset=utf-8'; '.svg'='image/svg+xml'; '.ico'='image/x-icon'
     '.jpg'='image/jpeg'; '.jpeg'='image/jpeg'; '.png'='image/png'; '.webp'='image/webp'; '.gif'='image/gif'; '.avif'='image/avif'
     '.mp4'='video/mp4'; '.m4v'='video/mp4'; '.webm'='video/webm'; '.mov'='video/quicktime'
     '.pdf'='application/pdf'; '.glb'='model/gltf-binary'; '.gltf'='model/gltf+json'
